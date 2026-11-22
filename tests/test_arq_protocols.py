@@ -1,22 +1,23 @@
-# tests/test_arq_protocols.py
+"""
+tests/test_arq_protocols.py - Deterministic end-to-end tests for ARQ protocols.
+"""
 
-import sys
-import os
-
-# Add the root project directory to Python's path so we can import 'core'
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import random
+import pytest
 
 from core.channel import NetworkChannel
-from core.protocols.stop_and_wait import StopAndWaitProtocol
+from core.protocols.base import Frame, FrameKind
 from core.protocols.go_back_n import GoBackNProtocol
 from core.protocols.selective_repeat import SelectiveRepeatProtocol
+from core.protocols.stop_and_wait import StopAndWaitProtocol
 
-def run_simulation(proto_a, proto_b, loss_rate, num_messages):
+
+def run_simulation(proto_a, proto_b, loss_rate: float, num_messages: int, seed: int = 42):
     """
     Runs an end-to-end simulation between two protocol nodes.
     Node A sends `num_messages` to Node B.
     """
-    # Create bidirectional links
+    random.seed(seed)
     forward_link = NetworkChannel(latency_ticks=1, loss_rate=loss_rate)
     reverse_link = NetworkChannel(latency_ticks=1, loss_rate=loss_rate)
 
@@ -25,98 +26,94 @@ def run_simulation(proto_a, proto_b, loss_rate, num_messages):
 
     max_ticks = 2000
     for tick in range(1, max_ticks + 1):
-        # 1. Node A sends data if its window allows
         if send_queue:
             frame = proto_a.send_data(send_queue[0], tick)
             if frame:
                 forward_link.transmit(frame)
-                send_queue.pop(0)  # Successfully buffered in the sender window
+                send_queue.pop(0)
 
-        # 2. Node A handles timeouts (retransmits expired frames)
         for re_frame in proto_a.handle_tick(tick):
             forward_link.transmit(re_frame)
             retransmissions += 1
 
-        # 3. Advance network time
         arrived_at_b = forward_link.step()
         arrived_at_a = reverse_link.step()
 
-        # 4. Node B processes arriving DATA and replies with ACKs/NAKs
         for frame in arrived_at_b:
             ack_or_nak = proto_b.receive_frame(frame, tick)
             if ack_or_nak:
                 reverse_link.transmit(ack_or_nak)
-        
-        proto_b.handle_tick(tick) # Receiver timeouts (if any)
 
-        # 5. Node A processes returning ACKs/NAKs
+        proto_b.handle_tick(tick)
+
         for frame in arrived_at_a:
             proto_a.receive_frame(frame, tick)
 
-        # 6. Check Completion State
-        # The simulation is done when Node A has no more packets to send,
-        # its active window is completely empty, and the network pipes are drained.
         if not send_queue and not forward_link.pipe and not reverse_link.pipe:
-            if hasattr(proto_a, 'waiting_for_ack'):
+            if hasattr(proto_a, "waiting_for_ack"):
                 is_done = not proto_a.waiting_for_ack
             else:
                 is_done = proto_a.sender_window.is_empty()
-                
             if is_done:
                 return tick, retransmissions
 
-    return -1, retransmissions  # Timeout reached, failed to deliver
+    return -1, retransmissions
 
-def run_tests():
-    print("========================================")
-    print(" Running ARQ Protocol Verification Tests ")
-    print("========================================\n")
 
-    # TEST 1: Stop-and-Wait (Clean)
+def test_stop_and_wait_clean():
     node_a = StopAndWaitProtocol(timeout_ticks=5)
     node_b = StopAndWaitProtocol(timeout_ticks=5)
     ticks, retrans = run_simulation(node_a, node_b, loss_rate=0.0, num_messages=5)
-    print("--- Test 1: Stop-and-Wait on Clean Channel (0% Loss) ---")
-    print(f"Delivered 5/5 in {ticks} ticks. Retransmissions: {retrans}")
-    print("PASS: Stop-and-Wait cleanly delivered all packets.\n" if retrans == 0 else "FAIL\n")
+    assert ticks > 0
+    assert retrans == 0
 
-    # TEST 2: Stop-and-Wait (Lossy)
+
+def test_stop_and_wait_lossy():
     node_a = StopAndWaitProtocol(timeout_ticks=5)
     node_b = StopAndWaitProtocol(timeout_ticks=5)
-    ticks, retrans = run_simulation(node_a, node_b, loss_rate=0.25, num_messages=5)
-    print("--- Test 2: Stop-and-Wait on Lossy Channel (25% Loss) ---")
-    print(f"Delivered 5/5 in {ticks} ticks. Retransmissions: {retrans}")
-    print("PASS: Stop-and-Wait recovered from loss via retransmissions.\n" if retrans > 0 else "FAIL\n")
+    ticks, retrans = run_simulation(node_a, node_b, loss_rate=0.25, num_messages=8, seed=7)
+    assert ticks > 0
+    assert retrans > 0
 
-    # TEST 3: Go-Back-N (Clean)
-    # MAX_SEQ = 7 means window size can be up to 7
+
+def test_go_back_n_clean():
     node_a = GoBackNProtocol(max_seq=7, max_window_size=7, timeout_ticks=8)
     node_b = GoBackNProtocol(max_seq=7, max_window_size=7, timeout_ticks=8)
     ticks, retrans = run_simulation(node_a, node_b, loss_rate=0.0, num_messages=15)
-    print("--- Test 3: Go-Back-N on Clean Channel (0% Loss, Window=7) ---")
-    print(f"Delivered 15/15 in {ticks} ticks. Retransmissions: {retrans}")
-    print("PASS: Go-Back-N pipelined and delivered all 15 packets smoothly.\n" if retrans == 0 else "FAIL\n")
+    assert ticks > 0
+    assert retrans == 0
 
-    # TEST 4: Go-Back-N (Lossy)
+
+def test_go_back_n_lossy():
     node_a = GoBackNProtocol(max_seq=7, max_window_size=7, timeout_ticks=8)
     node_b = GoBackNProtocol(max_seq=7, max_window_size=7, timeout_ticks=8)
-    ticks, retrans = run_simulation(node_a, node_b, loss_rate=0.25, num_messages=15)
-    print("--- Test 4: Go-Back-N on Lossy Channel (25% Loss) ---")
-    print(f"Delivered 15/15 in {ticks} ticks. Retransmissions: {retrans}")
-    print("PASS: Go-Back-N successfully backed up and recovered from dropped frames.\n" if retrans > 0 else "FAIL\n")
+    ticks, retrans = run_simulation(node_a, node_b, loss_rate=0.25, num_messages=15, seed=42)
+    assert ticks > 0
+    assert retrans > 0
 
-    # TEST 5: Selective Repeat (Lossy)
-    # MAX_SEQ = 7 means window size MUST be <= 4 ( (7+1)/2 ) to prevent overlap ambiguity
+
+def test_selective_repeat_lossy():
     node_a = SelectiveRepeatProtocol(max_seq=7, max_window_size=4, timeout_ticks=8)
     node_b = SelectiveRepeatProtocol(max_seq=7, max_window_size=4, timeout_ticks=8)
-    ticks, retrans = run_simulation(node_a, node_b, loss_rate=0.25, num_messages=15)
-    print("--- Test 5: Selective Repeat on Lossy Channel (25% Loss, Window=4) ---")
-    print(f"Delivered 15/15 in {ticks} ticks. Retransmissions: {retrans}")
-    print("PASS: Selective Repeat recovered using independent timers and NAKs.\n" if retrans > 0 else "FAIL\n")
+    ticks, retrans = run_simulation(node_a, node_b, loss_rate=0.25, num_messages=15, seed=42)
+    assert ticks > 0
+    assert retrans > 0
 
-    print("========================================")
-    print(" ALL PROTOCOL VERIFICATION TESTS COMPLETED ")
-    print("========================================")
 
-if __name__ == "__main__":
-    run_tests()
+def test_selective_repeat_validates_window_size():
+    with pytest.raises(ValueError):
+        SelectiveRepeatProtocol(max_seq=7, max_window_size=5)
+
+
+def test_selective_repeat_old_duplicate_does_not_send_spurious_nak():
+    receiver = SelectiveRepeatProtocol(max_seq=7, max_window_size=4)
+    # Deliver seq 0 cleanly -> recv_lower advances to 1
+    ack0 = receiver.receive_frame(Frame(kind=FrameKind.DATA, seq=0, payload="P0"), current_tick=1)
+    assert ack0 is not None and ack0.kind == FrameKind.ACK and ack0.ack == 0
+
+    # Receiving old duplicate seq 0 should re-ACK 0, not emit a NAK for 1
+    reply = receiver.receive_frame(Frame(kind=FrameKind.DATA, seq=0, payload="P0"), current_tick=2)
+    assert reply is not None
+    assert reply.kind == FrameKind.ACK
+    assert reply.ack == 0
+    assert receiver.nak_sent[1] is False

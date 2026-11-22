@@ -3303,6 +3303,8 @@ async function initApp() {
   sendSingleFrame();
   renderSlidingAll();
 
+  connectLiveSniffer(); 
+
   if (typeof lucide !== 'undefined' && lucide.createIcons) {
     lucide.createIcons();
   }
@@ -3314,6 +3316,166 @@ async function initApp() {
   if (window.notebookAppApi && typeof window.notebookAppApi.notifyAppReady === 'function') {
     window.notebookAppApi.notifyAppReady();
   }
+}
+// Live Sniffer & TCP Telemetry WebSocket client
+var liveCwndHistory = [];
+var livePacketSeq = 0;
+var liveWs = null;
+var liveReconnectDelayMs = 2000;
+var liveRenderTimer = null;
+
+function decodeBase64Bytes(b64, fallbackLen) {
+  if (!b64) return new Uint8Array(fallbackLen || 0);
+  try {
+    var bin = atob(b64);
+    var out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) {
+      out[i] = bin.charCodeAt(i);
+    }
+    return out;
+  } catch (e) {
+    return new Uint8Array(fallbackLen || 0);
+  }
+}
+
+function setLiveSnifferBadge(connected) {
+  var badge = document.getElementById('ws-live-status-badge');
+  var countEl = document.getElementById('ws-packet-count');
+  if (!badge && countEl && countEl.parentNode) {
+    badge = document.createElement('span');
+    badge.id = 'ws-live-status-badge';
+    badge.className = 'pill-badge';
+    badge.style.marginLeft = 'var(--space-sm)';
+    countEl.parentNode.insertBefore(badge, countEl.nextSibling);
+  }
+  if (!badge) return;
+  if (connected) {
+    badge.textContent = 'LIVE SNIFFER CONNECTED';
+    badge.style.color = 'var(--tertiary)';
+    badge.style.borderColor = 'var(--tertiary)';
+  } else {
+    badge.textContent = 'LIVE SNIFFER OFFLINE';
+    badge.style.color = 'var(--on-surface-variant)';
+    badge.style.borderColor = 'var(--outline-variant)';
+  }
+}
+
+function scheduleLiveWiresharkRender() {
+  if (liveRenderTimer !== null) return;
+  liveRenderTimer = setTimeout(function() {
+    liveRenderTimer = null;
+    renderWiresharkPane1();
+  }, 150);
+}
+
+function connectLiveSniffer() {
+  var host = window.location.hostname;
+  var isLocal = host === 'localhost' || host === '127.0.0.1' || window.location.protocol === 'file:';
+  if (!isLocal) {
+    return;
+  }
+
+  if (liveWs && (liveWs.readyState === WebSocket.OPEN || liveWs.readyState === WebSocket.CONNECTING)) {
+    return;
+  }
+
+  var ws = new WebSocket('ws://localhost:8765');
+  liveWs = ws;
+
+  ws.onopen = function() {
+    liveReconnectDelayMs = 2000;
+    setLiveSnifferBadge(true);
+
+    // Add the live telemetry dataset once
+    if (tcpChart && tcpChart.data.datasets.length === 4) {
+      tcpChart.data.datasets.push({
+        label: 'Live Captured Flow (Estimated MSS)',
+        data: liveCwndHistory,
+        borderColor: cssToken('--data-3'),
+        backgroundColor: 'transparent',
+        borderWidth: 2,
+        tension: 0.2,
+        pointRadius: 0
+      });
+      tcpChart.update();
+    }
+  };
+
+  ws.onmessage = function(event) {
+    var msg;
+    try {
+      msg = JSON.parse(event.data);
+    } catch (e) {
+      return;
+    }
+
+    if (msg.type === 'telemetry') {
+      liveCwndHistory.push(msg.live_cwnd);
+
+      var noteEl = document.getElementById('tcp-event-note');
+      if (noteEl && noteEl.firstElementChild) {
+        noteEl.firstElementChild.textContent = '';
+        var strong = document.createElement('strong');
+        strong.textContent = 'Live Flow Classification: ';
+        var span = document.createElement('span');
+        span.style.color = 'var(--warning)';
+        span.textContent = String(msg.cognition || '');
+        noteEl.firstElementChild.appendChild(strong);
+        noteEl.firstElementChild.appendChild(span);
+      }
+
+      if (liveCwndHistory.length > tcpLab.labels.length) {
+        tcpLab.labels.push(String(tcpLab.labels.length));
+        tcpLab.reno.historyCwnd.push(null);
+        tcpLab.tahoe.historyCwnd.push(null);
+        tcpLab.reno.historySs.push(null);
+        tcpLab.tahoe.historySs.push(null);
+      }
+      if (tcpChart) tcpChart.update('none');
+    } else if (msg.type === 'packet') {
+      livePacketSeq += 1;
+      var pktRecord = {
+        no: livePacketSeq,
+        time: typeof msg.time === 'number' ? msg.time : 0,
+        src: msg.src || '',
+        dst: msg.dst || '',
+        srcPort: msg.srcPort || 0,
+        dstPort: msg.dstPort || 0,
+        proto: msg.proto || 'IP',
+        length: msg.length || 0,
+        payloadLen: msg.payloadLen || 0,
+        payloadText: msg.payloadText || '',
+        info: msg.info || '',
+        seqNum: msg.seqNum || 0,
+        ackNum: msg.ackNum || 0,
+        ipId: msg.ipId || 0,
+        ipSum: msg.ipSum || 0,
+        tcpSum: msg.tcpSum || 0,
+        flags: msg.flags || 0,
+        badChecksum: !!msg.badChecksum,
+        isRetrans: !!msg.isRetrans,
+        isDupAck: !!msg.isDupAck,
+        dir: msg.dir || 'C2S',
+        bytes: decodeBase64Bytes(msg.rawBytesB64, msg.length)
+      };
+
+      wsState.packets.push(pktRecord);
+      if (wsState.packets.length > 1000) wsState.packets.shift();
+      scheduleLiveWiresharkRender();
+    }
+  };
+
+  ws.onerror = function() {
+    setLiveSnifferBadge(false);
+  };
+
+  ws.onclose = function() {
+    liveWs = null;
+    setLiveSnifferBadge(false);
+    var delay = liveReconnectDelayMs;
+    liveReconnectDelayMs = Math.min(10000, Math.floor(liveReconnectDelayMs * 1.5));
+    setTimeout(connectLiveSniffer, delay);
+  };
 }
 
 document.addEventListener('DOMContentLoaded', initApp);

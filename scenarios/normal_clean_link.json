@@ -1,0 +1,10 @@
+{
+  "name": "Normal Clean Link",
+  "description": "Low-latency wired link with zero packet loss and minimal jitter.",
+  "latency_ms": 20,
+  "jitter_ms": 2,
+  "loss_rate": 0.0,
+  "timeout_ticks": 10,
+  "max_seq": 7,
+  "window_size": 4
+}

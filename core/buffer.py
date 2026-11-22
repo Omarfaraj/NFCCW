@@ -24,6 +24,13 @@ class CircularBuffer:
     """
 
     def __init__(self, max_seq: int, max_window_size: int):
+        if max_seq < 1:
+            raise ValueError("max_seq must be at least 1.")
+        if not (1 <= max_window_size <= max_seq):
+            raise ValueError(
+                f"max_window_size must be between 1 and max_seq ({max_seq}) "
+                "to avoid full/empty wraparound ambiguity."
+            )
         self.max_seq = max_seq
         self.space_size = max_seq + 1
         self.max_window_size = max_window_size

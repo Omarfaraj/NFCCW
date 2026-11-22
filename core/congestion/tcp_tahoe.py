@@ -47,4 +47,5 @@ class TCPTahoe:
         # ssthresh becomes half the current congestion window (minimum 2)
         self.ssthresh = max(2, int(self.cwnd / 2))
         self.cwnd = 1.0
+        self.duplicate_acks = 0
         self.state = TahoeState.SLOW_START

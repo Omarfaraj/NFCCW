@@ -1,0 +1,10 @@
+{
+  "name": "High-Latency Satellite",
+  "description": "Long propagation delay link illustrating bandwidth-delay product and pipelining benefits.",
+  "latency_ms": 600,
+  "jitter_ms": 25,
+  "loss_rate": 0.02,
+  "timeout_ticks": 25,
+  "max_seq": 15,
+  "window_size": 8
+}

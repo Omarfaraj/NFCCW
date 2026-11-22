@@ -1,116 +1,88 @@
-# tests/test_congestion.py
+"""
+tests/test_congestion.py - Verification tests for TCP Tahoe, TCP Reno, and TokenBucket.
+"""
 
-import sys
-import os
+from core.congestion.tcp_reno import RenoState, TCPReno
+from core.congestion.tcp_tahoe import TahoeState, TCPTahoe
+from core.congestion.token_bucket import TokenBucket
 
-# Add the root project directory to Python's path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from core.congestion.tcp_tahoe import TCPTahoe, TahoeState
-from core.congestion.tcp_reno import TCPReno, RenoState
-
-def format_cwnd(cwnd):
-    """Helper to cleanly format the float cwnd for printing."""
-    return f"{cwnd:.2f}"
 
 def test_tcp_tahoe():
-    print("--- Testing TCP Tahoe ---")
     tahoe = TCPTahoe(initial_ssthresh=8)
-    
-    print(f"Initial State: {tahoe.state.name}, cwnd: {format_cwnd(tahoe.cwnd)}, ssthresh: {tahoe.ssthresh}")
-    
-    # 1. Simulate Slow Start (Exponential Growth)
-    print("\nSimulating Slow Start (Receiving 7 ACKs)...")
+    assert tahoe.state == TahoeState.SLOW_START
+    assert tahoe.cwnd == 1.0
+
+    # 1. Slow Start (exponential growth to ssthresh)
     for i in range(1, 8):
         tahoe.handle_ack(i)
-        
-    print(f"Current State: {tahoe.state.name}, cwnd: {format_cwnd(tahoe.cwnd)}, ssthresh: {tahoe.ssthresh}")
-    if tahoe.state == TahoeState.CONGESTION_AVOIDANCE and tahoe.cwnd >= 8.0:
-        print("✅ Slow Start threshold reached. Transitioned to Congestion Avoidance.")
-    else:
-        print("❌ FAILED: Did not transition to Congestion Avoidance correctly.")
+    assert tahoe.state == TahoeState.CONGESTION_AVOIDANCE
+    assert tahoe.cwnd == 8.0
 
-    # 2. Simulate Congestion Avoidance (Linear Growth - AIMD)
-    print("\nSimulating Congestion Avoidance (Receiving 8 ACKs)...")
+    # 2. Congestion Avoidance (linear AIMD growth)
     for i in range(8, 16):
         tahoe.handle_ack(i)
-        
-    print(f"Current State: {tahoe.state.name}, cwnd: {format_cwnd(tahoe.cwnd)}")
-    # Expected: cwnd increases by roughly 1 MSS for every full window of ACKs
-    if tahoe.cwnd > 8.0 and tahoe.cwnd < 16.0: 
-         print("✅ Congestion Avoidance (Linear Growth) verified.")
-    else:
-         print("❌ FAILED: Linear growth incorrect.")
+    assert 8.5 < tahoe.cwnd < 10.0
 
-    # 3. Simulate Packet Loss via 3 Duplicate ACKs
-    print("\nSimulating Packet Loss (Receiving 3 Duplicate ACKs for seq 15)...")
+    # 3. 3 Duplicate ACKs trigger reset to Slow Start with cwnd = 1.0
+    expected_ssthresh = max(2, int(tahoe.cwnd / 2))
     for _ in range(3):
         tahoe.handle_ack(15)
-        
-    print(f"Current State: {tahoe.state.name}, cwnd: {format_cwnd(tahoe.cwnd)}, ssthresh: {tahoe.ssthresh}")
-    if tahoe.state == TahoeState.SLOW_START and tahoe.cwnd == 1.0:
-        print("✅ Fast Retransmit verified. Tahoe dropped cwnd to 1 and entered Slow Start.")
-    else:
-        print("❌ FAILED: Tahoe did not reset to cwnd=1 on 3 duplicate ACKs.")
+    assert tahoe.state == TahoeState.SLOW_START
+    assert tahoe.cwnd == 1.0
+    assert tahoe.ssthresh == expected_ssthresh
+    assert tahoe.duplicate_acks == 0
+
+    # 4. Timeout resets cwnd and duplicate_acks
+    tahoe.handle_ack(16)
+    tahoe.handle_ack(16)
+    assert tahoe.duplicate_acks == 1
+    tahoe.handle_timeout()
+    assert tahoe.cwnd == 1.0
+    assert tahoe.duplicate_acks == 0
+    assert tahoe.state == TahoeState.SLOW_START
+
 
 def test_tcp_reno():
-    print("\n--- Testing TCP Reno ---")
     reno = TCPReno(initial_ssthresh=8)
-    
-    print(f"Initial State: {reno.state.name}, cwnd: {format_cwnd(reno.cwnd)}, ssthresh: {reno.ssthresh}")
-    
-    # 1. Simulate Slow Start & Congestion Avoidance
-    print("\nSimulating Slow Start and Congestion Avoidance (Receiving 15 ACKs)...")
+
+    # 1. Slow Start & Congestion Avoidance
     for i in range(1, 16):
         reno.handle_ack(i)
-        
-    print(f"Current State: {reno.state.name}, cwnd: {format_cwnd(reno.cwnd)}, ssthresh: {reno.ssthresh}")
-
+    assert reno.state == RenoState.CONGESTION_AVOIDANCE
     expected_ssthresh = max(2, int(reno.cwnd / 2))
-    
-    # 2. Simulate Packet Loss via 3 Duplicate ACKs
-    print("\nSimulating Packet Loss (Receiving 3 Duplicate ACKs for seq 15)...")
+
+    # 2. 3 Duplicate ACKs enter Fast Recovery
     for _ in range(3):
         reno.handle_ack(15)
-        
-    print(f"Current State: {reno.state.name}, cwnd: {format_cwnd(reno.cwnd)}, ssthresh: {reno.ssthresh}")
-    
-    if reno.state == RenoState.FAST_RECOVERY and reno.ssthresh == expected_ssthresh:
-        print(f"✅ Fast Recovery verified. Reno halved ssthresh to {reno.ssthresh} and inflated cwnd.")
-    else:
-        print("❌ FAILED: Reno did not enter Fast Recovery correctly.")
+    assert reno.state == RenoState.FAST_RECOVERY
+    assert reno.ssthresh == expected_ssthresh
+    assert reno.cwnd == expected_ssthresh + 3
 
-    # 3. Simulate Recovery Complete (Receiving a NEW ACK)
-    print("\nSimulating Recovery Complete (Receiving new ACK for seq 20)...")
+    # 3. Additional dup ACK inflates cwnd
+    reno.handle_ack(15)
+    assert reno.cwnd == expected_ssthresh + 4
+
+    # 4. New ACK deflates cwnd to ssthresh and returns to Congestion Avoidance
     reno.handle_ack(20)
-    print(f"Current State: {reno.state.name}, cwnd: {format_cwnd(reno.cwnd)}, ssthresh: {reno.ssthresh}")
-    
-    if reno.state == RenoState.CONGESTION_AVOIDANCE and reno.cwnd == reno.ssthresh:
-        print("✅ Deflation verified. Reno returned to Congestion Avoidance with cwnd = ssthresh.")
-    else:
-        print("❌ FAILED: Reno did not deflate cwnd correctly after Fast Recovery.")
+    assert reno.state == RenoState.CONGESTION_AVOIDANCE
+    assert reno.cwnd == reno.ssthresh
+    assert reno.duplicate_acks == 0
 
-    # 4. Simulate Severe Packet Loss (Timeout)
-    print("\nSimulating Severe Packet Loss (Timeout)...")
+    # 5. Severe loss (Timeout) drops cwnd to 1 and restarts Slow Start
     reno.handle_timeout()
-    print(f"Current State: {reno.state.name}, cwnd: {format_cwnd(reno.cwnd)}, ssthresh: {reno.ssthresh}")
-    
-    if reno.state == RenoState.SLOW_START and reno.cwnd == 1.0:
-        print("✅ Timeout verified. Reno dropped cwnd to 1 and restarted Slow Start.")
-    else:
-        print("❌ FAILED: Reno did not drop to cwnd=1 on timeout.")
+    assert reno.state == RenoState.SLOW_START
+    assert reno.cwnd == 1.0
+    assert reno.duplicate_acks == 0
 
-def run_tests():
-    print("===========================================")
-    print(" Running TCP Congestion Verification Tests ")
-    print("===========================================\n")
-    
-    test_tcp_tahoe()
-    test_tcp_reno()
 
-    print("\n===========================================")
-    print(" ALL CONGESTION VERIFICATION TESTS COMPLETED ")
-    print("===========================================")
+def test_token_bucket():
+    bucket = TokenBucket(refill_rate_bytes_per_sec=1000.0, capacity_bytes=2000.0)
+    assert bucket.consume(1500.0) is True
+    assert bucket.consume(1000.0) is False  # Only 500 bytes left
 
-if __name__ == "__main__":
-    run_tests()
+    bucket.refill(0.5)  # +500 -> 1000
+    assert bucket.consume(1000.0) is True
+    assert bucket.tokens == 0.0
+
+    bucket.refill(10.0)  # Capped at capacity
+    assert bucket.tokens == 2000.0

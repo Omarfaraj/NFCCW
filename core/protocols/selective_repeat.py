@@ -8,6 +8,11 @@ from ..buffer import CircularBuffer, between, inc
 
 class SelectiveRepeatProtocol(BaseProtocol):
     def __init__(self, max_seq: int, max_window_size: int, timeout_ticks: int = 10):
+        max_allowed = (max_seq + 1) // 2
+        if max_window_size > max_allowed:
+            raise ValueError(
+                f"Selective Repeat requires max_window_size <= (max_seq + 1) // 2 ({max_allowed})."
+            )
         super().__init__(max_seq)
         self.sender_window = CircularBuffer(max_seq, max_window_size)
         self.timers = TimerManager(default_timeout_ticks=timeout_ticks)
@@ -44,16 +49,16 @@ class SelectiveRepeatProtocol(BaseProtocol):
                     return Frame(kind=FrameKind.DATA, seq=frame.ack, ack=0, payload=payload)
 
         elif frame.kind == FrameKind.DATA:
-            if frame.seq != self.recv_lower and not self.nak_sent[self.recv_lower]:
-                outbound_frame = Frame(kind=FrameKind.NAK, seq=0, ack=self.recv_lower)
-                self.nak_sent[self.recv_lower] = True
-
             if between(self.recv_lower, frame.seq, self.recv_upper):
+                if frame.seq != self.recv_lower and not self.nak_sent[self.recv_lower]:
+                    outbound_frame = Frame(kind=FrameKind.NAK, seq=0, ack=self.recv_lower)
+                    self.nak_sent[self.recv_lower] = True
+
                 if self.receiver_window.get(frame.seq) is None:
                     self.receiver_window.put_at(frame.seq, frame.payload)
 
                 while self.receiver_window.get(self.recv_lower) is not None:
-                    # FIX: Manually erase the slot data to prevent ghost frames on wraparound!
+                    # Erase slot data to prevent ghost frames on wraparound
                     self.receiver_window.put_at(self.recv_lower, None)
                     self.nak_sent[self.recv_lower] = False 
                     
@@ -63,9 +68,8 @@ class SelectiveRepeatProtocol(BaseProtocol):
                     highest_received = (self.recv_lower - 1) % (self.max_seq + 1)
                     outbound_frame = Frame(kind=FrameKind.ACK, seq=0, ack=highest_received)
             else:
-                if outbound_frame is None:
-                    highest_received = (self.recv_lower - 1) % (self.max_seq + 1)
-                    outbound_frame = Frame(kind=FrameKind.ACK, seq=0, ack=highest_received)
+                highest_received = (self.recv_lower - 1) % (self.max_seq + 1)
+                outbound_frame = Frame(kind=FrameKind.ACK, seq=0, ack=highest_received)
 
         return outbound_frame
 

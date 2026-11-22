@@ -1,0 +1,10 @@
+{
+  "name": "Bursty Loss Mobile",
+  "description": "Wireless cellular link with moderate jitter and frequent packet drops.",
+  "latency_ms": 80,
+  "jitter_ms": 30,
+  "loss_rate": 0.15,
+  "timeout_ticks": 12,
+  "max_seq": 7,
+  "window_size": 4
+}
