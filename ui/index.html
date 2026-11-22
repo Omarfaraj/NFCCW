@@ -1,0 +1,3322 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="artifact-type" content="tool">
+<meta name="design-style" content="aurora">
+<title>Network Flow &amp; Congestion Control Workbench</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/lucide@1.43.0/dist/umd/lucide.min.js"></script>
+<style>
+:root {
+  color-scheme: dark;
+
+  /* Aurora Palette */
+  --background: #0c1214;
+  --surface-container-low: #111a1e;
+  --surface-container: #152024;
+  --surface-container-high: #1c2a30;
+
+  --on-surface: #edf3f5;
+  --on-surface-variant: #94a8b0;
+
+  --outline: #38515c;
+  --outline-variant: #213138;
+
+  --primary: #63c7d6;
+  --on-primary: #081214;
+  --primary-container: #163840;
+  --on-primary-container: #c7f0f7;
+  --secondary: #5d7882;
+  --tertiary: #87d69b;
+  --error: #f27474;
+  --on-error: #1a0606;
+
+  /* Data series */
+  --data-1: #63c7d6;
+  --data-2: #87d69b;
+  --data-3: #e8b954;
+  --data-4: #f08c70;
+  --data-context: #415861;
+
+  /* Semantic & focus */
+  --positive: #87d69b;
+  --warning: #e8b954;
+  --focus: #63c7d6;
+
+  /* Typography */
+  --font-headline: 'Instrument Sans', sans-serif;
+  --font-body: 'Plus Jakarta Sans', sans-serif;
+  --font-label: 'Geist Mono', monospace;
+
+  /* Type scale (Focused Tool) */
+  --display-size: clamp(1.75rem, 1.4rem + 1.2vw, 2.25rem);
+  --headline-size: clamp(1.25rem, 1.1rem + 0.5vw, 1.5rem);
+  --subhead-size: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
+  --body-size: clamp(0.9375rem, 0.9rem + 0.15vw, 1rem);
+  --label-size: 0.75rem;
+
+  /* Spacing scale */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2.5rem;
+  --space-2xl: 4rem;
+  --space-3xl: 6rem;
+
+  /* Radii */
+  --rounded: 0.5rem;
+  --rounded-lg: 0.75rem;
+  --rounded-full: 9999px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 120ms;
+  --dur-short: 220ms;
+  --dur-long: 420ms;
+
+  /* Style effects & Wireshark packet colouring tokens */
+  --hairline: 1px solid var(--outline-variant);
+  --hairline-strong: 1px solid var(--outline);
+  --panel-gradient: linear-gradient(180deg, #162226 0%, #111a1e 100%);
+  --heading-tracking: -0.025em;
+  --label-tracking: 0.06em;
+  --sage-tint: color-mix(in srgb, var(--tertiary) 13%, transparent);
+  --cyan-tint: color-mix(in srgb, var(--primary) 13%, transparent);
+  --amber-tint: color-mix(in srgb, var(--warning) 14%, transparent);
+  --error-tint: color-mix(in srgb, var(--error) 15%, transparent);
+  --primary-hover: color-mix(in srgb, var(--primary) 82%, var(--on-surface));
+  --sage-border: color-mix(in srgb, var(--tertiary) 35%, transparent);
+  --cyan-border: color-mix(in srgb, var(--primary) 40%, transparent);
+  --amber-border: color-mix(in srgb, var(--warning) 40%, transparent);
+  --error-border: color-mix(in srgb, var(--error) 45%, transparent);
+}
+
+/* Base reset */
+*, *::before, *::after { box-sizing: border-box; }
+html, body {
+  overflow-x: clip;
+  margin: 0;
+  padding: 0;
+  background-color: var(--background);
+  color: var(--on-surface);
+  font-family: var(--font-body);
+  font-size: var(--body-size);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+header { position: static !important; }
+
+/* Focus accessibility */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.page-grid {
+  display: grid;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  max-width: 1360px;
+  margin: 0 auto;
+  overflow: hidden;
+}
+.page-grid * { min-width: 0; }
+
+/* Header & Navigation */
+.workbench-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--space-md);
+  padding-bottom: var(--space-md);
+  border-bottom: var(--hairline);
+}
+.title-block {
+  max-width: 68ch;
+}
+.title {
+  font-family: var(--font-headline);
+  font-size: var(--display-size);
+  font-weight: 600;
+  letter-spacing: var(--heading-tracking);
+  line-height: 1.1;
+  color: var(--on-surface);
+  margin: 0 0 var(--space-xs) 0;
+}
+.subtitle {
+  margin: 0;
+  color: var(--on-surface-variant);
+  font-size: var(--body-size);
+  line-height: 1.5;
+}
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.section-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  padding: var(--space-xs);
+  background: var(--surface-container-low);
+  border: var(--hairline);
+  border-radius: var(--rounded);
+}
+.nav-jump {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--rounded);
+  font-family: var(--font-label);
+  font-size: var(--label-size);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--on-surface-variant);
+  text-decoration: none;
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
+}
+.nav-jump:hover {
+  background: var(--surface-container-high);
+  color: var(--on-surface);
+}
+
+/* Panels & Wells (Aurora treatments) */
+.panel {
+  background: var(--panel-gradient);
+  border: var(--hairline);
+  border-radius: var(--rounded-lg);
+  padding: var(--space-lg);
+}
+.panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-md);
+  border-bottom: var(--hairline);
+}
+.section-heading {
+  font-family: var(--font-headline);
+  font-size: var(--headline-size);
+  font-weight: 600;
+  letter-spacing: var(--heading-tracking);
+  line-height: 1.15;
+  color: var(--on-surface);
+  margin: 0 0 var(--space-xs) 0;
+}
+.section-desc {
+  margin: 0;
+  color: var(--on-surface-variant);
+  font-size: 0.9375rem;
+  max-width: 72ch;
+}
+.subhead {
+  font-family: var(--font-headline);
+  font-size: var(--subhead-size);
+  font-weight: 600;
+  letter-spacing: var(--heading-tracking);
+  color: var(--on-surface);
+  margin: 0;
+}
+.data-label {
+  font-family: var(--font-label);
+  font-size: var(--label-size);
+  font-weight: 500;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--on-surface-variant);
+}
+.well {
+  background: var(--background);
+  border: var(--hairline);
+  border-radius: var(--rounded);
+  padding: var(--space-md);
+}
+
+/* Buttons & Interactive Controls */
+button, input, select {
+  font-family: inherit;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--rounded);
+  font-family: var(--font-headline);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: var(--hairline-strong);
+  background: transparent;
+  color: var(--on-surface);
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out);
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) {
+  background: var(--surface-container-high);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--primary);
+  color: var(--on-primary);
+  border-color: var(--primary);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+.btn-danger {
+  background: var(--error-tint);
+  color: var(--error);
+  border-color: var(--error-border);
+}
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--error) 24%, transparent);
+}
+.btn-warning {
+  background: var(--amber-tint);
+  color: var(--warning);
+  border-color: var(--amber-border);
+}
+.btn-warning:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warning) 24%, transparent);
+}
+.btn-compact {
+  min-height: 36px;
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--label-size);
+  font-family: var(--font-label);
+}
+.btn.is-armed {
+  background: var(--error-tint);
+  color: var(--error);
+  border-color: var(--error-border);
+}
+
+/* Segmented Protocol Toggle */
+.segmented-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  padding: var(--space-xs);
+  background: var(--background);
+  border: var(--hairline);
+  border-radius: var(--rounded);
+}
+.seg-btn {
+  min-height: 40px;
+  padding: var(--space-xs) var(--space-md);
+  border: none;
+  border-radius: var(--rounded);
+  background: transparent;
+  color: var(--on-surface-variant);
+  font-family: var(--font-label);
+  font-size: var(--label-size);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
+}
+.seg-btn:hover {
+  color: var(--on-surface);
+  background: var(--surface-container);
+}
+.seg-btn.active {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  box-shadow: inset 0 0 0 1px var(--cyan-border);
+}
+
+/* Status Chips & Metric Tiles */
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  background: var(--sage-tint);
+  color: var(--tertiary);
+  border: 1px solid var(--sage-border);
+  border-radius: var(--rounded);
+  padding: 3px var(--space-sm);
+  font-family: var(--font-label);
+  font-size: var(--label-size);
+  font-variant-numeric: tabular-nums;
+}
+.status-chip.cyan {
+  background: var(--cyan-tint);
+  color: var(--primary);
+  border-color: var(--cyan-border);
+}
+.status-chip.amber {
+  background: var(--amber-tint);
+  color: var(--warning);
+  border-color: var(--amber-border);
+}
+.status-chip.error {
+  background: var(--error-tint);
+  color: var(--error);
+  border-color: var(--error-border);
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-sm);
+}
+.metric-tile {
+  background: var(--background);
+  border: var(--hairline);
+  border-radius: var(--rounded);
+  padding: var(--space-sm) var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.metric-value {
+  font-family: var(--font-headline);
+  font-size: 1.5rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--heading-tracking);
+  line-height: 1.1;
+  color: var(--on-surface);
+}
+.metric-delta {
+  font-family: var(--font-label);
+  font-size: var(--label-size);
+  color: var(--tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.metric-delta.neutral {
+  color: var(--on-surface-variant);
+}
+
+/* Form Inputs & Sliders */
+.control-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.field-label {
+  font-family: var(--font-label);
+  font-size: var(--label-size);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--on-surface-variant);
+}
+.dual-input {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 44px;
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--background);
+  border: var(--hairline);
+  border-radius: var(--rounded);
+}
+input[type="range"] {
+  accent-color: var(--primary);
+  cursor: pointer;
+  min-width: 100px;
+  height: 24px;
+}
+.num-input, .text-input {
+  background: var(--background);
+  color: var(--on-surface);
+  border: var(--hairline-strong);
+  border-radius: var(--rounded);
+  font-family: var(--font-label);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  padding: var(--space-xs) var(--space-sm);
+  min-height: 36px;
+}
+.num-input {
+  width: 74px;
+  text-align: right;
+}
+.text-input {
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-md);
+  width: 100%;
+}
+.text-input.is-valid {
+  box-shadow: inset 0 0 0 1px var(--sage-border);
+  background: color-mix(in srgb, var(--tertiary) 6%, var(--background));
+}
+.text-input.is-invalid {
+  box-shadow: inset 0 0 0 1px var(--error-border);
+  background: color-mix(in srgb, var(--error) 8%, var(--background));
+}
+
+/* Section 1 & 2: Sliding Window & Pipeline Stage */
+.sw-stage {
+  display: grid;
+  grid-template-columns: minmax(250px, 1fr) minmax(300px, 1.45fr) minmax(250px, 1fr);
+  gap: var(--space-md);
+  align-items: stretch;
+}
+.wheel-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.wheel-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.wheel-svg {
+  width: 100%;
+  max-width: 240px;
+  height: auto;
+  display: block;
+}
+.wheel-slot {
+  cursor: pointer;
+  transition: opacity var(--dur-micro) var(--ease-out);
+}
+.wheel-slot:hover {
+  opacity: 0.85;
+}
+.wheel-legend {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  font-family: var(--font-label);
+  font-size: var(--label-size);
+  color: var(--on-surface-variant);
+  justify-content: center;
+}
+.legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+/* In-Flight Transmission Pipeline */
+.pipeline-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+.pipeline-canvas-wrap {
+  position: relative;
+  min-height: 230px;
+  border-radius: var(--rounded);
+  background: var(--background);
+  border: var(--hairline);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--space-md);
+}
+.pipeline-svg {
+  width: 100%;
+  height: 196px;
+  display: block;
+}
+.fault-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Between(a,b,c) Evaluator */
+.between-bar {
+  margin-top: var(--space-md);
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: var(--space-md);
+  align-items: center;
+}
+.code-expr {
+  font-family: var(--font-label);
+  font-size: 0.8125rem;
+  color: var(--on-surface);
+  background: var(--surface-container-low);
+  border: var(--hairline);
+  border-radius: var(--rounded);
+  padding: var(--space-sm) var(--space-md);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.clause-active {
+  color: var(--tertiary);
+  font-weight: 600;
+}
+.clause-inactive {
+  color: var(--on-surface-variant);
+}
+
+/* Section 3: Congestion Control & Token Bucket */
+.lab-two-col {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: var(--space-lg);
+}
+.tcp-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+.tcp-card {
+  background: var(--background);
+  border: var(--hairline);
+  border-radius: var(--rounded);
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.tcp-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.tcp-stats-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  font-family: var(--font-label);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+.chart-container {
+  position: relative;
+  min-height: 300px;
+  width: 100%;
+  background: var(--background);
+  border: var(--hairline);
+  border-radius: var(--rounded);
+  padding: var(--space-sm);
+}
+.chart-container-sm {
+  position: relative;
+  min-height: 210px;
+  width: 100%;
+  background: var(--background);
+  border: var(--hairline);
+  border-radius: var(--rounded);
+  padding: var(--space-sm);
+}
+.bucket-visual-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: var(--space-md);
+  align-items: center;
+  margin-bottom: var(--space-md);
+}
+.bucket-svg {
+  width: 112px;
+  height: 150px;
+  display: block;
+}
+.equation-box {
+  font-family: var(--font-label);
+  font-size: 0.8125rem;
+  color: var(--on-surface);
+  background: var(--background);
+  border: var(--hairline);
+  border-radius: var(--rounded);
+  padding: var(--space-sm) var(--space-md);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Section 4: Wireshark 3-Pane Inspector */
+.ws-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-sm);
+  align-items: end;
+  margin-bottom: var(--space-sm);
+}
+.ws-filter-row {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+}
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
+  align-items: center;
+}
+.chip-btn {
+  min-height: 32px;
+  padding: 4px var(--space-sm);
+  border-radius: var(--rounded);
+  border: var(--hairline);
+  background: var(--background);
+  color: var(--on-surface-variant);
+  font-family: var(--font-label);
+  font-size: var(--label-size);
+  cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
+}
+.chip-btn:hover, .chip-btn.active {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  border-color: var(--cyan-border);
+}
+
+.ws-pane-1 {
+  background: var(--background);
+  border: var(--hairline);
+  border-radius: var(--rounded);
+  overflow: hidden;
+  margin-bottom: var(--space-md);
+}
+.ws-table-scroll {
+  max-height: 240px;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+.ws-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-label);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+.ws-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-container-high);
+  color: var(--on-surface-variant);
+  font-weight: 500;
+  text-transform: uppercase;
+  font-size: var(--label-size);
+  letter-spacing: var(--label-tracking);
+  text-align: left;
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: var(--hairline);
+  z-index: 1;
+}
+.ws-table td {
+  padding: 5px var(--space-sm);
+  border-bottom: var(--hairline);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ws-row-data { background: color-mix(in srgb, var(--primary) 7%, var(--background)); color: var(--on-surface); }
+.ws-row-ack { background: color-mix(in srgb, var(--tertiary) 7%, var(--background)); color: var(--on-surface); }
+.ws-row-dup { background: color-mix(in srgb, var(--warning) 10%, var(--background)); color: var(--warning); }
+.ws-row-err { background: color-mix(in srgb, var(--error) 12%, var(--background)); color: var(--error); }
+.ws-table tr:hover td {
+  filter: brightness(1.15);
+}
+.ws-table tr.is-selected td {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+.ws-bottom-panes {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: var(--space-md);
+}
+.ws-details-well, .ws-bytes-well {
+  background: var(--background);
+  border: var(--hairline);
+  border-radius: var(--rounded);
+  padding: var(--space-sm);
+  min-height: 250px;
+  max-height: 310px;
+  overflow-y: auto;
+  font-family: var(--font-label);
+  font-size: 0.8125rem;
+}
+.tree-node {
+  margin-bottom: var(--space-xs);
+}
+.tree-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: var(--rounded);
+  padding: 4px var(--space-xs);
+  color: var(--on-surface);
+  font-family: var(--font-label);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+.tree-summary:hover {
+  background: var(--surface-container);
+}
+.tree-summary.active-range {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+.tree-children {
+  padding-left: var(--space-md);
+  border-left: var(--hairline);
+  margin-left: var(--space-sm);
+}
+.tree-leaf {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  padding: 2px var(--space-xs);
+  color: var(--on-surface-variant);
+  font-family: var(--font-label);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.tree-leaf:hover {
+  color: var(--on-surface);
+  background: var(--surface-container);
+}
+.tree-leaf.active-range {
+  background: var(--cyan-tint);
+  color: var(--primary);
+}
+
+.hex-line {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  gap: var(--space-sm);
+  padding: 2px var(--space-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+.hex-offset {
+  color: var(--on-surface-variant);
+  user-select: none;
+}
+.hex-bytes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.hex-byte {
+  padding: 0 2px;
+  border-radius: 2px;
+  color: var(--on-surface);
+}
+.hex-byte.hl {
+  background: var(--primary);
+  color: var(--on-primary);
+  font-weight: 600;
+}
+.hex-ascii {
+  color: var(--tertiary);
+  letter-spacing: 0.04em;
+  white-space: pre;
+}
+.hex-char.hl {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+/* Follow TCP Stream Inline Panel */
+.tcp-stream-panel {
+  margin-top: var(--space-md);
+  background: var(--background);
+  border: var(--hairline-strong);
+  border-radius: var(--rounded);
+  padding: var(--space-md);
+}
+.stream-log {
+  max-height: 180px;
+  overflow-y: auto;
+  font-family: var(--font-label);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  margin-top: var(--space-sm);
+}
+.stream-c2s { color: var(--primary); }
+.stream-s2c { color: var(--tertiary); }
+
+/* Reference Footer */
+.sources-footer {
+  border-top: var(--hairline);
+  padding-top: var(--space-md);
+  color: var(--on-surface-variant);
+  font-size: 0.875rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+.card-wrapper { container-type: inline-size; }
+
+/* Responsive Breakpoints */
+@media (max-width: 1024px) {
+  .sw-stage {
+    grid-template-columns: 1fr;
+  }
+  .lab-two-col {
+    grid-template-columns: 1fr;
+  }
+  .between-bar {
+    grid-template-columns: 1fr;
+  }
+  .ws-bottom-panes {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .page-grid {
+    grid-template-columns: 1fr;
+    padding: var(--space-sm);
+    gap: var(--space-md);
+  }
+  .panel {
+    padding: var(--space-md);
+  }
+  .tcp-compare-grid {
+    grid-template-columns: 1fr;
+  }
+  .bucket-visual-row {
+    grid-template-columns: 1fr;
+  }
+  .ws-toolbar {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+</style>
+</head>
+<body>
+<div class="page-grid">
+
+  <!-- Header -->
+  <header class="workbench-header">
+    <div class="title-block">
+      <h1 class="title">Network Flow &amp; Congestion Control Workbench</h1>
+      <p class="subtitle">Interactive simulation of Tanenbaum&#8217;s data-link sliding window protocols, TCP Tahoe vs Reno congestion dynamics, token-bucket traffic shaping, and live Wireshark packet dissection.</p>
+    </div>
+    <div class="header-actions">
+      <nav class="section-nav" aria-label="Workbench sections">
+        <a class="nav-jump" href="#sec-sliding">1. Sliding Window</a>
+        <a class="nav-jump" href="#sec-pipeline">2. Link Pipeline</a>
+        <a class="nav-jump" href="#sec-congestion">3. TCP &amp; Shaper</a>
+        <a class="nav-jump" href="#sec-wireshark">4. Wireshark PCAP</a>
+      </nav>
+      <button type="button" class="btn btn-primary" onclick="exportPcapFile()">
+        <i data-lucide="download" aria-hidden="true" style="width:16px;height:16px;"></i>
+        Export .pcap
+      </button>
+    </div>
+  </header>
+
+  <!-- Section 1 & 2: Protocol Selector, Circular Sequence Wheels & In-Flight Pipeline -->
+  <section id="sec-sliding" class="panel" aria-labelledby="heading-sliding">
+    <div class="panel-head">
+      <div>
+        <h2 id="heading-sliding" class="section-heading">Data-Link Sliding Window &amp; In-Flight Channel</h2>
+        <p class="section-desc">Compare Stop-and-Wait (Protocol 3), Go-Back-N (Protocol 5), and Selective Repeat (Protocol 6) with live circular sequence arithmetic, retransmission timers, and fault injection.</p>
+      </div>
+      <div class="segmented-group" role="group" aria-label="Data-link protocol selector">
+        <button type="button" class="seg-btn" id="proto-btn-3" onclick="setProtocol('p3')">Stop-and-Wait (P3)</button>
+        <button type="button" class="seg-btn" id="proto-btn-5" onclick="setProtocol('p5')">Go-Back-N (P5)</button>
+        <button type="button" class="seg-btn active" id="proto-btn-6" onclick="setProtocol('p6')">Selective Repeat (P6)</button>
+      </div>
+    </div>
+
+    <!-- Primary Controls -->
+    <div class="control-bar">
+      <div class="field-group">
+        <span class="field-label">Simulation Transport</span>
+        <div style="display:flex;flex-wrap:wrap;gap:var(--space-xs);">
+          <button type="button" class="btn btn-primary" id="btn-play-pause" onclick="toggleSimPlay()">
+            <i data-lucide="play" aria-hidden="true" style="width:16px;height:16px;"></i>
+            <span id="play-pause-label">Start Stream</span>
+          </button>
+          <button type="button" class="btn" onclick="sendSingleFrame()">Send Frame</button>
+          <button type="button" class="btn" onclick="sendBurstFrames(4)">Burst &#215;4</button>
+          <button type="button" class="btn" onclick="resetSlidingSim(this)">Reset Link</button>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="slider-latency">Propagation Delay (ms)</label>
+        <div class="dual-input">
+          <input type="range" id="slider-latency" min="350" max="2400" step="50" value="1100" oninput="syncLatencyFromSlider(this.value)">
+          <input type="number" id="input-latency" class="num-input" min="350" max="2400" step="50" value="1100" oninput="syncLatencyFromNumber(this.value)" aria-label="Propagation Delay in milliseconds">
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="slider-jitter">Delay Jitter (ms)</label>
+        <div class="dual-input">
+          <input type="range" id="slider-jitter" min="0" max="450" step="25" value="80" oninput="syncJitterFromSlider(this.value)">
+          <input type="number" id="input-jitter" class="num-input" min="0" max="450" step="25" value="80" oninput="syncJitterFromNumber(this.value)" aria-label="Delay Jitter in milliseconds">
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="slider-loss">Loss Rate (%)</label>
+        <div class="dual-input">
+          <input type="range" id="slider-loss" min="0" max="45" step="5" value="10" oninput="syncLossFromSlider(this.value)">
+          <input type="number" id="input-loss" class="num-input" min="0" max="45" step="5" value="10" oninput="syncLossFromNumber(this.value)" aria-label="Random Packet Loss Percentage">
+        </div>
+      </div>
+    </div>
+
+    <!-- 3-Column Visual Stage -->
+    <div id="sec-pipeline" class="sw-stage">
+      <!-- Sender Circular Buffer Wheel -->
+      <div class="well wheel-card">
+        <div class="wheel-header">
+          <div>
+            <span class="data-label">Sender Window</span>
+            <h3 class="subhead" id="sender-win-title">W&#8347; = 4 (Mod 8)</h3>
+          </div>
+          <span class="status-chip cyan" id="sender-buf-chip">0 / 4 Buffered</span>
+        </div>
+        <svg id="sender-wheel-svg" class="wheel-svg" viewBox="0 0 240 240" role="img" aria-label="Sender circular sequence number wheel"></svg>
+        <div class="wheel-legend">
+          <span><span class="legend-dot" style="background:var(--primary);"></span>Unacked / In-Flight</span>
+          <span><span class="legend-dot" style="background:var(--warning);"></span>Timed Out / Retrying</span>
+          <span><span class="legend-dot" style="background:var(--surface-container-high);"></span>Outside Window</span>
+        </div>
+        <div class="equation-box" style="width:100%;font-size:0.75rem;" id="sender-pointers-readout">
+          ack_expected = 0 &#183; next_frame_to_send = 0
+        </div>
+      </div>
+
+      <!-- In-Flight Transmission Pipeline -->
+      <div class="well pipeline-card">
+        <div class="fault-toolbar">
+          <div>
+            <span class="data-label">Full-Duplex Physical Link</span>
+            <div style="font-family:var(--font-label);font-size:0.8125rem;color:var(--on-surface-variant);">
+              192.168.56.101 &#8644; 192.168.56.103
+            </div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:var(--space-xs);">
+            <button type="button" class="btn btn-compact btn-danger" id="btn-drop-next" onclick="armFault('drop_data')">Drop Next Frame</button>
+            <button type="button" class="btn btn-compact btn-warning" id="btn-corrupt-next" onclick="armFault('corrupt_data')">Corrupt CRC</button>
+            <button type="button" class="btn btn-compact btn-danger" id="btn-drop-ack" onclick="armFault('drop_ack')">Drop Next ACK</button>
+          </div>
+        </div>
+
+        <div class="pipeline-canvas-wrap">
+          <svg id="pipeline-svg" class="pipeline-svg" viewBox="0 0 520 196" role="img" aria-label="In-flight frames and acknowledgements pipeline">
+            <!-- Forward Data Track -->
+            <text x="8" y="20" fill="var(--on-surface-variant)" font-family="Geist Mono, monospace" font-size="11">HOST A (SENDER)</text>
+            <text x="512" y="20" text-anchor="end" fill="var(--on-surface-variant)" font-family="Geist Mono, monospace" font-size="11">HOST B (RECEIVER)</text>
+
+            <line x1="16" y1="62" x2="504" y2="62" stroke="var(--outline)" stroke-width="2" stroke-dasharray="6 4"/>
+            <polygon points="504,62 495,57 495,67" fill="var(--primary)"/>
+            <text x="16" y="44" fill="var(--primary)" font-family="Geist Mono, monospace" font-size="10">FORWARD CHANNEL &#8594; DATA FRAMES</text>
+
+            <!-- Reverse ACK/NAK Track -->
+            <line x1="16" y1="142" x2="504" y2="142" stroke="var(--outline)" stroke-width="2" stroke-dasharray="6 4"/>
+            <polygon points="16,142 25,137 25,147" fill="var(--tertiary)"/>
+            <text x="504" y="124" text-anchor="end" fill="var(--tertiary)" font-family="Geist Mono, monospace" font-size="10">&#8592; REVERSE CHANNEL (ACK / NAK)</text>
+
+            <g id="pipeline-packets-layer"></g>
+            <g id="pipeline-events-layer"></g>
+          </svg>
+        </div>
+
+        <div class="kpi-grid">
+          <div class="metric-tile">
+            <span class="data-label">Delivered</span>
+            <span class="metric-value" id="kpi-delivered">0</span>
+            <span class="metric-delta" id="kpi-goodput">0.00 frames/s</span>
+          </div>
+          <div class="metric-tile">
+            <span class="data-label">Retransmits</span>
+            <span class="metric-value" id="kpi-retrans">0</span>
+            <span class="metric-delta neutral" id="kpi-naks">0 NAKs sent</span>
+          </div>
+          <div class="metric-tile">
+            <span class="data-label">Lost / CRC</span>
+            <span class="metric-value" id="kpi-lost">0</span>
+            <span class="metric-delta neutral" id="kpi-ack-timer">Aux ACK: Idle</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Receiver Circular Buffer Wheel -->
+      <div class="well wheel-card">
+        <div class="wheel-header">
+          <div>
+            <span class="data-label">Receiver Window</span>
+            <h3 class="subhead" id="recv-win-title">W&#7523; = 4 (Mod 8)</h3>
+          </div>
+          <span class="status-chip" id="recv-buf-chip">0 Out-of-Order</span>
+        </div>
+        <svg id="receiver-wheel-svg" class="wheel-svg" viewBox="0 0 240 240" role="img" aria-label="Receiver circular sequence number wheel"></svg>
+        <div class="wheel-legend">
+          <span><span class="legend-dot" style="background:var(--tertiary);"></span>Buffered Out-of-Order</span>
+          <span><span class="legend-dot" style="background:var(--primary);"></span>Expected Next</span>
+          <span><span class="legend-dot" style="background:var(--surface-container-high);"></span>Discarded</span>
+        </div>
+        <div class="equation-box" style="width:100%;font-size:0.75rem;" id="recv-pointers-readout">
+          frame_expected = 0 &#183; too_far = 4
+        </div>
+      </div>
+    </div>
+
+    <!-- Circular Sequence Arithmetic Inspector -->
+    <div class="well between-bar">
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-sm);margin-bottom:var(--space-xs);">
+          <span class="data-label">Circular Sequence Arithmetic &#8212; Tanenbaum between(a, b, c)</span>
+          <span class="status-chip cyan" id="probe-result-badge">Probe b = 0: True</span>
+        </div>
+        <div class="code-expr" id="between-formula-display">
+          return ((a &lt;= b) &amp;&amp; (b &lt; c)) || ((c &lt; a) &amp;&amp; (a &lt;= b)) || ((b &lt; c) &amp;&amp; (c &lt; a));
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:var(--space-xs);">
+        <span class="data-label">Click any sequence slot on either wheel (or select b) to inspect wrap-around</span>
+        <div style="display:flex;flex-wrap:wrap;gap:var(--space-xs);" id="probe-seq-buttons"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 3: TCP Congestion Control & Token Bucket Traffic Shaper -->
+  <section id="sec-congestion" class="lab-two-col" aria-label="TCP Congestion Control and Traffic Shaping">
+
+    <!-- Part A: TCP Tahoe vs Reno -->
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2 class="section-heading">TCP Tahoe vs TCP Reno Congestion Lab</h2>
+          <p class="section-desc">Observe Slow Start, Congestion Avoidance (AIMD), Fast Retransmit on 3&#215; duplicate ACKs, and Fast Recovery sawtooth dynamics.</p>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:var(--space-xs);">
+          <button type="button" class="chip-btn active" id="tcp-preset-classic" onclick="loadTcpPreset('classic')">Classic Fig. 6-46/47</button>
+          <button type="button" class="chip-btn" id="tcp-preset-lossy" onclick="loadTcpPreset('lossy')">Heavy Loss</button>
+          <button type="button" class="chip-btn" id="tcp-preset-lfn" onclick="loadTcpPreset('lfn')">Long Fat Network</button>
+        </div>
+      </div>
+
+      <div class="control-bar">
+        <div class="field-group">
+          <span class="field-label">Round Progression</span>
+          <div style="display:flex;flex-wrap:wrap;gap:var(--space-xs);">
+            <button type="button" class="btn btn-primary btn-compact" onclick="stepTcpRound()">Step +1 RTT</button>
+            <button type="button" class="btn btn-compact" id="btn-tcp-auto" onclick="toggleTcpAuto()">Auto Run</button>
+            <button type="button" class="btn btn-warning btn-compact" onclick="injectTcpLoss('dup3')">3&#215; Dup-ACK</button>
+            <button type="button" class="btn btn-danger btn-compact" onclick="injectTcpLoss('timeout')">RTO Timeout</button>
+            <button type="button" class="btn btn-compact" onclick="resetTcpLab()">Reset</button>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="input-init-ssthresh">Initial ssthresh (MSS)</label>
+          <input type="number" id="input-init-ssthresh" class="num-input" min="8" max="64" step="2" value="32" oninput="updateTcpConfig(this.value)">
+        </div>
+      </div>
+
+      <div class="tcp-compare-grid">
+        <div class="tcp-card">
+          <div class="tcp-card-head">
+            <span class="data-label" style="color:var(--data-4);">TCP Tahoe (1988)</span>
+            <span class="status-chip amber" id="tahoe-phase-chip">Slow Start</span>
+          </div>
+          <div class="tcp-stats-row">
+            <span>cwnd: <strong id="tahoe-cwnd">1</strong> MSS</span>
+            <span>ssthresh: <strong id="tahoe-ssthresh">32</strong></span>
+            <span>Sent: <strong id="tahoe-total">0</strong></span>
+          </div>
+        </div>
+
+        <div class="tcp-card">
+          <div class="tcp-card-head">
+            <span class="data-label" style="color:var(--data-1);">TCP Reno (1990)</span>
+            <span class="status-chip cyan" id="reno-phase-chip">Slow Start</span>
+          </div>
+          <div class="tcp-stats-row">
+            <span>cwnd: <strong id="reno-cwnd">1</strong> MSS</span>
+            <span>ssthresh: <strong id="reno-ssthresh">32</strong></span>
+            <span>Sent: <strong id="reno-total">0</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-container" style="min-height:310px;">
+        <canvas id="tcp-chart" aria-label="TCP Tahoe versus TCP Reno congestion window chart"></canvas>
+      </div>
+
+      <div class="equation-box" style="margin-top:var(--space-sm);display:flex;flex-wrap:wrap;justify-content:space-between;gap:var(--space-sm);" id="tcp-event-note">
+        <span>Round 0 &#8212; Both flows initialise cwnd = 1 MSS, doubling every RTT until reaching ssthresh.</span>
+        <span style="color:var(--tertiary);" id="reno-advantage-delta">Reno Efficiency: +0.0%</span>
+      </div>
+    </div>
+
+    <!-- Part B: Token Bucket Traffic Shaper -->
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2 class="section-heading">Token Bucket Shaper (R, B)</h2>
+          <p class="section-desc">Regulate bursty host traffic into router buffers using Tanenbaum&#8217;s Token Bucket model (Fig. 5-28 &amp; 5-29).</p>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:var(--space-xs);">
+          <button type="button" class="chip-btn" id="tb-preset-unaltered" onclick="loadBucketPreset(16000)">B = 16,000 KB</button>
+          <button type="button" class="chip-btn active" id="tb-preset-smoothed" onclick="loadBucketPreset(9600)">B = 9,600 KB</button>
+          <button type="button" class="chip-btn" id="tb-preset-flat" onclick="loadBucketPreset(0)">B = 0 KB</button>
+        </div>
+      </div>
+
+      <div class="bucket-visual-row">
+        <svg id="bucket-svg" class="bucket-svg" viewBox="0 0 112 150" role="img" aria-label="Token bucket fill level diagram">
+          <!-- Tap dripping tokens -->
+          <path d="M22,12 L52,12 L52,24" fill="none" stroke="var(--outline)" stroke-width="4" stroke-linecap="round"/>
+          <circle id="tap-drop" cx="52" cy="34" r="4" fill="var(--primary)"/>
+          <text x="64" y="18" fill="var(--on-surface-variant)" font-family="Geist Mono, monospace" font-size="10" id="svg-rate-label">R=25 MB/s</text>
+
+          <!-- Bucket body -->
+          <rect x="20" y="44" width="64" height="86" rx="4" fill="var(--background)" stroke="var(--outline)" stroke-width="2"/>
+          <clipPath id="bucket-clip">
+            <rect x="21" y="45" width="62" height="84" rx="3"/>
+          </clipPath>
+          <rect id="bucket-fill-rect" x="21" y="45" width="62" height="84" fill="var(--primary-container)" clip-path="url(#bucket-clip)"/>
+          <line id="bucket-surface-line" x1="21" y1="45" x2="83" y2="45" stroke="var(--primary)" stroke-width="2"/>
+          <text x="52" y="92" text-anchor="middle" fill="var(--on-surface)" font-family="Geist Mono, monospace" font-size="11" font-weight="600" id="bucket-pct-label">100%</text>
+          <text x="52" y="144" text-anchor="middle" fill="var(--on-surface-variant)" font-family="Geist Mono, monospace" font-size="10" id="svg-cap-label">B=9600 KB</text>
+        </svg>
+
+        <div style="display:flex;flex-direction:column;gap:var(--space-sm);">
+          <div class="field-group">
+            <label class="field-label" for="slider-tb-rate">Token Rate R (MB/s &#8212; 1 MB/s = 8 Mbps)</label>
+            <div class="dual-input">
+              <input type="range" id="slider-tb-rate" min="5" max="80" step="5" value="25" oninput="syncTbRateSlider(this.value)">
+              <input type="number" id="input-tb-rate" class="num-input" min="5" max="80" step="5" value="25" oninput="syncTbRateNumber(this.value)" aria-label="Token Arrival Rate MB per second">
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="slider-tb-cap">Bucket Capacity B (KB)</label>
+            <div class="dual-input">
+              <input type="range" id="slider-tb-cap" min="0" max="20000" step="800" value="9600" oninput="syncTbCapSlider(this.value)">
+              <input type="number" id="input-tb-cap" class="num-input" min="0" max="20000" step="800" value="9600" oninput="syncTbCapNumber(this.value)" aria-label="Bucket Capacity in kilobytes">
+            </div>
+          </div>
+
+          <div style="display:flex;flex-wrap:wrap;gap:var(--space-sm);align-items:center;justify-content:space-between;">
+            <div class="equation-box" id="tb-burst-formula" style="flex:1;">
+              S = B / (M &#8722; R) = 96.0 ms
+            </div>
+            <button type="button" class="btn btn-primary btn-compact" onclick="triggerBucketBurst()">Simulate Burst</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-container-sm" style="min-height:220px;">
+        <canvas id="bucket-chart" aria-label="Token bucket output rate and level chart"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 4: Wireshark PCAP Capture & 3-Pane Packet Inspector -->
+  <section id="sec-wireshark" class="panel" aria-labelledby="heading-wireshark">
+    <div class="panel-head">
+      <div>
+        <h2 id="heading-wireshark" class="section-heading">Wireshark Packet Capture &amp; 3-Pane Dissector</h2>
+        <p class="section-desc">Live Ethernet II / IPv4 / TCP capture generated from your simulated link. Filter packets, inspect OSI header subtrees with byte-offset highlighting, follow the TCP stream, or export a real Libpcap (.pcap) file.</p>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:var(--space-xs);align-items:center;">
+        <span class="status-chip" id="ws-packet-count">0 packets captured</span>
+        <button type="button" class="btn btn-compact" onclick="toggleTcpStreamDrawer()">Follow TCP Stream</button>
+        <button type="button" class="btn btn-primary btn-compact" onclick="exportPcapFile()">Download .pcap</button>
+      </div>
+    </div>
+
+    <!-- Display Filter & BPF Reference -->
+    <div class="ws-toolbar">
+      <div class="field-group">
+        <label class="field-label" for="ws-filter-input">Wireshark Display Filter (e.g. tcp.flags.ack == 1, tcp.len &gt; 0, tcp.analysis.retransmission, frame.bad_checksum == 1)</label>
+        <div class="ws-filter-row">
+          <input type="text" id="ws-filter-input" class="text-input" value="" placeholder="Enter display filter expression or select a preset chip below&#8230;" oninput="onDisplayFilterInput(this.value)">
+          <button type="button" class="btn btn-compact" onclick="clearDisplayFilter()">Clear</button>
+        </div>
+        <span id="ws-filter-feedback" class="data-label" style="color:var(--on-surface-variant);text-transform:none;letter-spacing:0;">Showing all captured frames. Capture Filter (BPF equivalent): host 192.168.56.101 and tcp port 8080</span>
+      </div>
+    </div>
+
+    <div class="filter-chips">
+      <span class="data-label" style="margin-right:var(--space-xs);">Quick Filters:</span>
+      <button type="button" class="chip-btn active" data-filter="" onclick="applyQuickFilter('')">All</button>
+      <button type="button" class="chip-btn" data-filter="tcp.len > 0" onclick="applyQuickFilter('tcp.len > 0')">Data Payload (tcp.len &gt; 0)</button>
+      <button type="button" class="chip-btn" data-filter="tcp.flags.ack == 1 && tcp.len == 0" onclick="applyQuickFilter('tcp.flags.ack == 1 && tcp.len == 0')">Pure ACKs</button>
+      <button type="button" class="chip-btn" data-filter="tcp.analysis.retransmission" onclick="applyQuickFilter('tcp.analysis.retransmission')">Retransmissions</button>
+      <button type="button" class="chip-btn" data-filter="frame.bad_checksum == 1" onclick="applyQuickFilter('frame.bad_checksum == 1')">Bad Checksum / Corrupt</button>
+      <button type="button" class="chip-btn" data-filter="ip.src == 192.168.56.101" onclick="applyQuickFilter('ip.src == 192.168.56.101')">From Host A</button>
+    </div>
+
+    <!-- Pane 1: Packet List -->
+    <div class="ws-pane-1">
+      <div class="ws-table-scroll">
+        <table class="ws-table" aria-label="Wireshark Packet List Pane">
+          <thead>
+            <tr>
+              <th>No.</th>
+              <th>Time</th>
+              <th>Source</th>
+              <th>Destination</th>
+              <th>Protocol</th>
+              <th>Length</th>
+              <th>Info</th>
+            </tr>
+          </thead>
+          <tbody id="ws-packet-tbody">
+            <tr>
+              <td colspan="7" style="color:var(--on-surface-variant);padding:var(--space-md);">No packets captured yet. Click <strong>Send Frame</strong> or <strong>Start Stream</strong> above to capture live frames.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Pane 2 & Pane 3: Packet Details & Packet Bytes -->
+    <div class="ws-bottom-panes">
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-xs);">
+          <span class="data-label">Pane 2 &#8212; Packet Details (OSI Dissector Subtrees)</span>
+          <span class="data-label" id="ws-selected-label" style="color:var(--primary);">Select a frame</span>
+        </div>
+        <div class="ws-details-well" id="ws-details-tree" aria-label="Packet Details Dissector Tree">
+          <div style="color:var(--on-surface-variant);padding:var(--space-sm);">Select any row in the Packet List pane to expand its Frame, Ethernet II, IPv4, and TCP dissector layers.</div>
+        </div>
+      </div>
+
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-xs);">
+          <span class="data-label">Pane 3 &#8212; Packet Bytes (Hex &amp; ASCII)</span>
+          <span class="data-label" id="ws-byte-range-label">Offsets: &#8212;</span>
+        </div>
+        <div class="ws-bytes-well" id="ws-bytes-dump" aria-label="Packet Bytes Hexadecimal and ASCII Dump">
+          <div style="color:var(--on-surface-variant);padding:var(--space-sm);">Raw octets will appear here; clicking any layer or field in Pane 2 highlights its exact byte range.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inline Follow TCP Stream Drawer -->
+    <div class="tcp-stream-panel" id="tcp-stream-drawer" hidden>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:var(--space-sm);">
+        <div>
+          <span class="data-label">Follow TCP Stream (eq 0)</span>
+          <span style="margin-left:var(--space-sm);font-family:var(--font-label);font-size:0.8125rem;color:var(--on-surface-variant);" id="stream-summary-meta">0 client segments &#183; 0 server acks</span>
+        </div>
+        <button type="button" class="btn btn-compact" onclick="toggleTcpStreamDrawer()">Close Stream</button>
+      </div>
+      <div class="stream-log" id="tcp-stream-log"></div>
+    </div>
+  </section>
+
+  <!-- Grounding Sources Footer -->
+  <footer class="sources-footer">
+    <div>
+      <strong>Theoretical &amp; Tooling Grounding:</strong> Andrew S. Tanenbaum &amp; David J. Wetherall, <em>Computer Networks</em> (5th ed. &#8212; Ch. 3 Data-Link Protocols 3, 5 &amp; 6; Ch. 5 Token Bucket &amp; QoS; Ch. 6 TCP Tahoe/Reno &amp; AIMD).
+    </div>
+    <div>
+      <strong>Packet Dissection &amp; Filtering:</strong> Jessey Bullock &amp; Jeff T. Parker, <em>Wireshark for Security Professionals</em> (Ch. 1 GUI &amp; Filters; Ch. 3 OSI Subtrees; Ch. 4 Capture &amp; Pcap; Ch. 6 TCP Streams).
+    </div>
+  </footer>
+
+</div>
+
+<api-shim></api-shim>
+<script>
+/* ===== Utility: Read CSS tokens so zero hardcoded colors sit in JS ===== */
+function cssToken(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/* ===== Tanenbaum Circular Sequence Arithmetic ===== */
+function between(a, b, c) {
+  return ((a <= b) && (b < c)) || ((c < a) && (a <= b)) || ((b < c) && (c < a));
+}
+
+function incSeq(k, maxSeq) {
+  return (k + 1) % (maxSeq + 1);
+}
+
+/* ===== Global Workbench State ===== */
+var PROTOCOLS = {
+  p3: { id: 'p3', name: 'Stop-and-Wait (Protocol 3)', maxSeq: 1, ws: 1, wr: 1, usesNak: false },
+  p5: { id: 'p5', name: 'Go-Back-N (Protocol 5)', maxSeq: 7, ws: 7, wr: 1, usesNak: false },
+  p6: { id: 'p6', name: 'Selective Repeat (Protocol 6)', maxSeq: 7, ws: 4, wr: 4, usesNak: true }
+};
+
+var sim = {
+  protocol: 'p6',
+  running: false,
+  latencyMs: 1100,
+  jitterMs: 80,
+  lossPct: 10,
+  ackExpected: 0,
+  nextFrameToSend: 0,
+  nbuffered: 0,
+  senderBuf: {},     // seq -> { seq, payloadId, sentAt, retries, timerMs, acked }
+  frameExpected: 0,
+  tooFar: 4,
+  arrived: {},       // seq -> boolean (Protocol 6 out-of-order buffer)
+  noNak: true,
+  inFlight: [],      // { id, kind: 'DATA'|'ACK'|'NAK', seq, ackNum, startMs, durMs, progress, corrupted, lost, dropAt, x, y, payloadText, isRetrans }
+  events: [],        // transient canvas markers { text, x, y, bornMs, colorVar }
+  probeSeq: 0,
+  armedFault: null,  // 'drop_data' | 'corrupt_data' | 'drop_ack'
+  nextPayloadId: 1,
+  deliveredCount: 0,
+  retransCount: 0,
+  lostCount: 0,
+  nakCount: 0,
+  startTimeMs: performance.now(),
+  lastTickMs: performance.now(),
+  autoSendAccumMs: 0,
+  auxAckTimerMs: null
+};
+
+var tcpLab = {
+  round: 0,
+  initSsthresh: 32,
+  maxWindow: 48,
+  autoTimer: null,
+  preset: 'classic',
+  tahoe: { cwnd: 1, ssthresh: 32, total: 0, phase: 'Slow Start', historyCwnd: [1], historySs: [32] },
+  reno: { cwnd: 1, ssthresh: 32, total: 0, phase: 'Slow Start', historyCwnd: [1], historySs: [32] },
+  labels: ['0']
+};
+
+var bucketLab = {
+  rateMBs: 25,
+  capKB: 9600,
+  peakMBs: 125,
+  burstKB: 16000,
+  preset: 'smoothed',
+  animPhase: 0
+};
+
+var wsState = {
+  packets: [],
+  selectedNo: null,
+  selectedRange: null,
+  filterText: '',
+  filterValid: true,
+  streamOpen: false,
+  ipIdCounter: 1001,
+  tcpBaseSeq: 1000,
+  tcpBaseAck: 5000
+};
+
+var tcpChart = null;
+var bucketChart = null;
+var animFrameId = null;
+
+/* ===== State Persistence (notebookAppApi) ===== */
+async function saveAppState() {
+  if (!window.notebookAppApi || typeof window.notebookAppApi.setAppState !== 'function') return;
+  try {
+    await window.notebookAppApi.setAppState({
+      protocol: sim.protocol,
+      latencyMs: sim.latencyMs,
+      jitterMs: sim.jitterMs,
+      lossPct: sim.lossPct,
+      probeSeq: sim.probeSeq,
+      tcpInitSsthresh: tcpLab.initSsthresh,
+      tcpPreset: tcpLab.preset,
+      tbRateMBs: bucketLab.rateMBs,
+      tbCapKB: bucketLab.capKB,
+      wsFilterText: wsState.filterText
+    });
+  } catch (e) {
+    /* Ignore transient host state quota/network errors */
+  }
+}
+
+async function restoreAppState() {
+  if (!window.notebookAppApi || typeof window.notebookAppApi.getAppState !== 'function') return;
+  try {
+    var saved = await window.notebookAppApi.getAppState();
+    if (!saved || typeof saved !== 'object') return;
+    if (saved.protocol && PROTOCOLS[saved.protocol]) sim.protocol = saved.protocol;
+    if (typeof saved.latencyMs === 'number') sim.latencyMs = Math.min(2400, Math.max(350, saved.latencyMs));
+    if (typeof saved.jitterMs === 'number') sim.jitterMs = Math.min(450, Math.max(0, saved.jitterMs));
+    if (typeof saved.lossPct === 'number') sim.lossPct = Math.min(45, Math.max(0, saved.lossPct));
+    if (typeof saved.probeSeq === 'number') sim.probeSeq = saved.probeSeq;
+    if (typeof saved.tcpInitSsthresh === 'number') tcpLab.initSsthresh = saved.tcpInitSsthresh;
+    if (typeof saved.tcpPreset === 'string' && (saved.tcpPreset === 'classic' || saved.tcpPreset === 'lossy' || saved.tcpPreset === 'lfn')) tcpLab.preset = saved.tcpPreset;
+    if (typeof saved.tbRateMBs === 'number') bucketLab.rateMBs = saved.tbRateMBs;
+    if (typeof saved.tbCapKB === 'number') bucketLab.capKB = saved.tbCapKB;
+    if (typeof saved.wsFilterText === 'string') wsState.filterText = saved.wsFilterText;
+  } catch (e) {
+    /* Fallback to defaults */
+  }
+}
+
+/* ===== Section 1 & 2: Protocol & Sliding Window Logic ===== */
+function getProtoCfg() {
+  return PROTOCOLS[sim.protocol] || PROTOCOLS.p6;
+}
+
+function setProtocol(protoKey) {
+  if (!PROTOCOLS[protoKey]) return;
+  sim.protocol = protoKey;
+  resetSlidingSimInternal();
+  updateProtocolButtons();
+  renderSlidingAll();
+  saveAppState();
+}
+
+function updateProtocolButtons() {
+  var ids = ['p3', 'p5', 'p6'];
+  for (var i = 0; i < ids.length; i++) {
+    var btn = document.getElementById('proto-btn-' + ids[i].slice(1));
+    if (btn) {
+      if (ids[i] === sim.protocol) btn.classList.add('active');
+      else btn.classList.remove('active');
+    }
+  }
+}
+
+function resetSlidingSimInternal() {
+  var cfg = getProtoCfg();
+  sim.ackExpected = 0;
+  sim.nextFrameToSend = 0;
+  sim.nbuffered = 0;
+  sim.senderBuf = {};
+  sim.frameExpected = 0;
+  sim.tooFar = cfg.wr % (cfg.maxSeq + 1);
+  sim.arrived = {};
+  sim.noNak = true;
+  sim.inFlight = [];
+  sim.events = [];
+  sim.probeSeq = 0;
+  sim.armedFault = null;
+  sim.auxAckTimerMs = null;
+  updateFaultButtons();
+}
+
+function resetSlidingSim(btn) {
+  if (btn && btn.dataset.armed !== 'true') {
+    btn.dataset.armed = 'true';
+    btn.textContent = 'Click again to reset';
+    btn.classList.add('is-armed');
+    setTimeout(function() {
+      if (btn.dataset.armed === 'true') {
+        btn.dataset.armed = 'false';
+        btn.textContent = 'Reset Link';
+        btn.classList.remove('is-armed');
+      }
+    }, 3000);
+    return;
+  }
+  if (btn) {
+    btn.dataset.armed = 'false';
+    btn.textContent = 'Reset Link';
+    btn.classList.remove('is-armed');
+  }
+  sim.running = false;
+  sim.deliveredCount = 0;
+  sim.retransCount = 0;
+  sim.lostCount = 0;
+  sim.nakCount = 0;
+  sim.nextPayloadId = 1;
+  sim.startTimeMs = performance.now();
+  resetSlidingSimInternal();
+  updatePlayPauseUI();
+  renderSlidingAll();
+}
+
+function toggleSimPlay() {
+  sim.running = !sim.running;
+  updatePlayPauseUI();
+  if (sim.running && sim.nbuffered === 0 && sim.inFlight.length === 0) {
+    sendSingleFrame();
+  }
+}
+
+function updatePlayPauseUI() {
+  var lbl = document.getElementById('play-pause-label');
+  var btn = document.getElementById('btn-play-pause');
+  if (!lbl || !btn) return;
+  lbl.textContent = sim.running ? 'Pause Stream' : 'Start Stream';
+}
+
+/* Dedicated dual-input handlers */
+function syncLatencyFromSlider(val) {
+  var n = Number(val);
+  sim.latencyMs = n;
+  var inp = document.getElementById('input-latency');
+  if (inp) inp.value = n;
+  saveAppState();
+}
+function syncLatencyFromNumber(val) {
+  var n = Math.min(2400, Math.max(350, Number(val) || 1100));
+  sim.latencyMs = n;
+  var sl = document.getElementById('slider-latency');
+  if (sl) sl.value = n;
+  saveAppState();
+}
+function syncJitterFromSlider(val) {
+  var n = Number(val);
+  sim.jitterMs = n;
+  var inp = document.getElementById('input-jitter');
+  if (inp) inp.value = n;
+  saveAppState();
+}
+function syncJitterFromNumber(val) {
+  var n = Math.min(450, Math.max(0, Number(val) || 0));
+  sim.jitterMs = n;
+  var sl = document.getElementById('slider-jitter');
+  if (sl) sl.value = n;
+  saveAppState();
+}
+function syncLossFromSlider(val) {
+  var n = Number(val);
+  sim.lossPct = n;
+  var inp = document.getElementById('input-loss');
+  if (inp) inp.value = n;
+  saveAppState();
+}
+function syncLossFromNumber(val) {
+  var n = Math.min(45, Math.max(0, Number(val) || 0));
+  sim.lossPct = n;
+  var sl = document.getElementById('slider-loss');
+  if (sl) sl.value = n;
+  saveAppState();
+}
+
+function armFault(type) {
+  sim.armedFault = (sim.armedFault === type) ? null : type;
+  updateFaultButtons();
+}
+
+function updateFaultButtons() {
+  var map = {
+    drop_data: 'btn-drop-next',
+    corrupt_data: 'btn-corrupt-next',
+    drop_ack: 'btn-drop-ack'
+  };
+  for (var k in map) {
+    var el = document.getElementById(map[k]);
+    if (el) {
+      if (sim.armedFault === k) el.classList.add('is-armed');
+      else el.classList.remove('is-armed');
+    }
+  }
+}
+
+function computeTimeoutMs() {
+  return Math.max(2200, sim.latencyMs * 2.5 + sim.jitterMs * 1.5);
+}
+
+function sendSingleFrame() {
+  var cfg = getProtoCfg();
+  if (sim.nbuffered >= cfg.ws) {
+    pushCanvasEvent(`Window full (W=${cfg.ws})`, 82, 34, '--warning');
+    return false;
+  }
+  var seq = sim.nextFrameToSend;
+  var payloadId = sim.nextPayloadId++;
+  var payloadText = `PKT#${String(payloadId).padStart(2, '0')} PROTO=${cfg.id.toUpperCase()} SEQ=${seq}`;
+  sim.senderBuf[seq] = {
+    seq: seq,
+    payloadId: payloadId,
+    payloadText: payloadText,
+    retries: 0,
+    timerMs: computeTimeoutMs(),
+    timedOut: false
+  };
+  sim.nbuffered++;
+  sim.nextFrameToSend = incSeq(sim.nextFrameToSend, cfg.maxSeq);
+  launchDataPacket(seq, payloadId, payloadText, false);
+  renderSlidingAll();
+  return true;
+}
+
+function sendBurstFrames(count) {
+  var sent = 0;
+  for (var i = 0; i < count; i++) {
+    if (sendSingleFrame()) sent++;
+  }
+  if (sent === 0) {
+    pushCanvasEvent(`Sender window blocked`, 82, 34, '--warning');
+  }
+}
+
+function launchDataPacket(seq, payloadId, payloadText, isRetrans) {
+  var jitter = (Math.random() * 2 - 1) * sim.jitterMs;
+  var dur = Math.max(280, sim.latencyMs + jitter);
+  var willDrop = false;
+  var willCorrupt = false;
+
+  if (sim.armedFault === 'drop_data') {
+    willDrop = true;
+    sim.armedFault = null;
+    updateFaultButtons();
+  } else if (sim.armedFault === 'corrupt_data') {
+    willCorrupt = true;
+    sim.armedFault = null;
+    updateFaultButtons();
+  } else if (Math.random() * 100 < sim.lossPct) {
+    willDrop = true;
+  }
+
+  var dropAt = willDrop ? (0.35 + Math.random() * 0.35) : 1.1;
+  var pkt = {
+    id: Math.random().toString(36).slice(2),
+    kind: 'DATA',
+    seq: seq,
+    payloadId: payloadId,
+    payloadText: payloadText,
+    isRetrans: isRetrans,
+    durMs: dur,
+    progress: 0,
+    corrupted: willCorrupt,
+    willDrop: willDrop,
+    dropAt: dropAt,
+    dropped: false
+  };
+  sim.inFlight.push(pkt);
+
+  // Capture on wire at Sender NIC (Wireshark logs transmitted wire frame)
+  logWiresharkPacket({
+    dir: 'C2S',
+    kind: 'DATA',
+    seq: seq,
+    ack: sim.frameExpected,
+    payloadText: payloadText,
+    corrupted: willCorrupt,
+    isRetrans: isRetrans,
+    isDupAck: false,
+    note: (isRetrans ? '[Retransmission] ' : '') + `DATA Seq=${seq} (${payloadText})` + (willCorrupt ? ' [BAD CRC]' : '')
+  });
+}
+
+function launchReverseControl(kind, ackNum) {
+  var jitter = (Math.random() * 2 - 1) * (sim.jitterMs * 0.6);
+  var dur = Math.max(260, sim.latencyMs * 0.85 + jitter);
+  var willDrop = false;
+  if (sim.armedFault === 'drop_ack') {
+    willDrop = true;
+    sim.armedFault = null;
+    updateFaultButtons();
+  } else if (Math.random() * 100 < sim.lossPct * 0.5) {
+    willDrop = true;
+  }
+  var dropAt = willDrop ? (0.35 + Math.random() * 0.35) : 1.1;
+  sim.inFlight.push({
+    id: Math.random().toString(36).slice(2),
+    kind: kind,
+    seq: ackNum,
+    ackNum: ackNum,
+    durMs: dur,
+    progress: 0,
+    corrupted: false,
+    willDrop: willDrop,
+    dropAt: dropAt,
+    dropped: false
+  });
+  if (kind === 'NAK') sim.nakCount++;
+
+  logWiresharkPacket({
+    dir: 'S2C',
+    kind: kind,
+    seq: 0,
+    ack: ackNum,
+    payloadText: '',
+    corrupted: false,
+    isRetrans: false,
+    isDupAck: kind === 'NAK',
+    note: kind === 'NAK'
+      ? `[Selective Repeat NAK] Requesting Seq=${ackNum}`
+      : `ACK=${ackNum} (Expecting next=${incSeq(ackNum, getProtoCfg().maxSeq)})`
+  });
+}
+
+function pushCanvasEvent(text, x, y, colorVar) {
+  sim.events.push({ text: text, x: x, y: y, life: 1.0, colorVar: colorVar || '--warning' });
+}
+
+function handleDataArrival(pkt) {
+  var cfg = getProtoCfg();
+  if (pkt.corrupted) {
+    sim.lostCount++;
+    pushCanvasEvent(`CRC ERROR Seq=${pkt.seq}`, 425, 42, '--error');
+    if (cfg.usesNak && sim.noNak) {
+      sim.noNak = false;
+      launchReverseControl('NAK', sim.frameExpected);
+    }
+    return;
+  }
+
+  if (cfg.id === 'p3') {
+    if (pkt.seq === sim.frameExpected) {
+      sim.deliveredCount++;
+      sim.frameExpected = incSeq(sim.frameExpected, cfg.maxSeq);
+      launchReverseControl('ACK', pkt.seq);
+    } else {
+      // Duplicate frame in Stop-and-Wait: re-ACK last received
+      var prev = (sim.frameExpected + cfg.maxSeq) % (cfg.maxSeq + 1);
+      pushCanvasEvent(`Dup Seq=${pkt.seq} -> Re-ACK ${prev}`, 410, 42, '--warning');
+      launchReverseControl('ACK', prev);
+    }
+  } else if (cfg.id === 'p5') {
+    // Go-Back-N: Wr = 1
+    if (pkt.seq === sim.frameExpected) {
+      sim.deliveredCount++;
+      sim.frameExpected = incSeq(sim.frameExpected, cfg.maxSeq);
+      launchReverseControl('ACK', pkt.seq);
+    } else {
+      var lastGood = (sim.frameExpected + cfg.maxSeq) % (cfg.maxSeq + 1);
+      pushCanvasEvent(`Out-of-order Seq=${pkt.seq} Discarded`, 410, 42, '--warning');
+      launchReverseControl('ACK', lastGood);
+    }
+  } else {
+    // Protocol 6 Selective Repeat
+    if (pkt.seq !== sim.frameExpected && sim.noNak) {
+      sim.noNak = false;
+      launchReverseControl('NAK', sim.frameExpected);
+    }
+    if (between(sim.frameExpected, pkt.seq, sim.tooFar) && !sim.arrived[pkt.seq]) {
+      sim.arrived[pkt.seq] = true;
+      var advanced = false;
+      while (sim.arrived[sim.frameExpected]) {
+        delete sim.arrived[sim.frameExpected];
+        sim.noNak = true;
+        sim.frameExpected = incSeq(sim.frameExpected, cfg.maxSeq);
+        sim.tooFar = incSeq(sim.tooFar, cfg.maxSeq);
+        sim.deliveredCount++;
+        advanced = true;
+      }
+      if (advanced) {
+        sim.auxAckTimerMs = Math.min(400, sim.latencyMs * 0.35);
+      } else {
+        pushCanvasEvent(`Buffered Seq=${pkt.seq} (Out-of-Order)`, 410, 42, '--tertiary');
+        sim.auxAckTimerMs = Math.min(350, sim.latencyMs * 0.3);
+      }
+    } else {
+      pushCanvasEvent(`Dup/Outside Seq=${pkt.seq}`, 415, 42, '--warning');
+      var ackPrev = (sim.frameExpected + cfg.maxSeq) % (cfg.maxSeq + 1);
+      launchReverseControl('ACK', ackPrev);
+    }
+  }
+}
+
+function handleReverseArrival(pkt) {
+  var cfg = getProtoCfg();
+  if (pkt.kind === 'ACK') {
+    var guard = 0;
+    while (between(sim.ackExpected, pkt.ackNum, sim.nextFrameToSend) && guard <= cfg.maxSeq + 1) {
+      delete sim.senderBuf[sim.ackExpected];
+      sim.nbuffered = Math.max(0, sim.nbuffered - 1);
+      sim.ackExpected = incSeq(sim.ackExpected, cfg.maxSeq);
+      guard++;
+    }
+  } else if (pkt.kind === 'NAK') {
+    if (between(sim.ackExpected, pkt.ackNum, sim.nextFrameToSend) && sim.senderBuf[pkt.ackNum]) {
+      var entry = sim.senderBuf[pkt.ackNum];
+      entry.retries++;
+      entry.timerMs = computeTimeoutMs();
+      entry.timedOut = false;
+      sim.retransCount++;
+      pushCanvasEvent(`NAK Retransmit Seq=${pkt.ackNum}`, 95, 168, '--warning');
+      launchDataPacket(entry.seq, entry.payloadId, entry.payloadText, true);
+    }
+  }
+}
+
+function stepSimulationTick(dtMs) {
+  var cfg = getProtoCfg();
+
+  // Advance in-flight packets
+  for (var i = sim.inFlight.length - 1; i >= 0; i--) {
+    var p = sim.inFlight[i];
+    p.progress += dtMs / p.durMs;
+    if (p.willDrop && !p.dropped && p.progress >= p.dropAt) {
+      p.dropped = true;
+      sim.lostCount++;
+      var dropX = p.kind === 'DATA' ? (44 + p.dropAt * 432) : (476 - p.dropAt * 432);
+      var dropY = p.kind === 'DATA' ? 62 : 142;
+      pushCanvasEvent(`DROPPED ${p.kind} ${p.seq}`, dropX, dropY - 16, '--error');
+      sim.inFlight.splice(i, 1);
+      continue;
+    }
+    if (p.progress >= 1) {
+      sim.inFlight.splice(i, 1);
+      if (p.kind === 'DATA') handleDataArrival(p);
+      else handleReverseArrival(p);
+    }
+  }
+
+  // Auxiliary ACK timer for Protocol 6
+  if (sim.auxAckTimerMs !== null) {
+    sim.auxAckTimerMs -= dtMs;
+    if (sim.auxAckTimerMs <= 0) {
+      sim.auxAckTimerMs = null;
+      var ackToSend = (sim.frameExpected + cfg.maxSeq) % (cfg.maxSeq + 1);
+      launchReverseControl('ACK', ackToSend);
+    }
+  }
+
+  // Retransmission Timers on Sender Buffer
+  var timedOutLowest = false;
+  for (var sKey in sim.senderBuf) {
+    var item = sim.senderBuf[sKey];
+    item.timerMs -= dtMs;
+    if (item.timerMs <= 0) {
+      item.timedOut = true;
+      if (cfg.id === 'p5') {
+        // Go-Back-N retransmits ALL outstanding frames from ackExpected!
+        if (Number(sKey) === sim.ackExpected) timedOutLowest = true;
+      } else {
+        // P3 & P6 retransmit only the timed-out frame
+        item.retries++;
+        item.timerMs = computeTimeoutMs();
+        sim.retransCount++;
+        pushCanvasEvent(`Timeout Retransmit Seq=${item.seq}`, 86, 36, '--warning');
+        launchDataPacket(item.seq, item.payloadId, item.payloadText, true);
+      }
+    }
+  }
+  if (timedOutLowest && cfg.id === 'p5') {
+    var cursor = sim.ackExpected;
+    var count = 0;
+    while (count < sim.nbuffered && sim.senderBuf[cursor]) {
+      var ent = sim.senderBuf[cursor];
+      ent.retries++;
+      ent.timerMs = computeTimeoutMs();
+      ent.timedOut = false;
+      sim.retransCount++;
+      launchDataPacket(ent.seq, ent.payloadId, ent.payloadText, true);
+      cursor = incSeq(cursor, cfg.maxSeq);
+      count++;
+    }
+    pushCanvasEvent(`Go-Back-N Timeout: Resent ${count}`, 92, 36, '--warning');
+  }
+
+  // Auto stream generator when running
+  if (sim.running) {
+    sim.autoSendAccumMs += dtMs;
+    var interval = Math.max(420, sim.latencyMs * 0.52);
+    if (sim.autoSendAccumMs >= interval) {
+      sim.autoSendAccumMs = 0;
+      if (sim.nbuffered < cfg.ws) {
+        sendSingleFrame();
+      }
+    }
+  }
+
+  // Decay transient canvas events
+  for (var j = sim.events.length - 1; j >= 0; j--) {
+    sim.events[j].life -= dtMs / 1350;
+    if (sim.events[j].life <= 0) sim.events.splice(j, 1);
+  }
+}
+
+/* ===== Render Circular Sequence Wheels & Pipeline SVG ===== */
+function polarPoint(cx, cy, r, angleDeg) {
+  var rad = (angleDeg - 90) * Math.PI / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+function describeArcWedge(cx, cy, rInner, rOuter, startDeg, endDeg) {
+  var p1 = polarPoint(cx, cy, rOuter, startDeg);
+  var p2 = polarPoint(cx, cy, rOuter, endDeg);
+  var p3 = polarPoint(cx, cy, rInner, endDeg);
+  var p4 = polarPoint(cx, cy, rInner, startDeg);
+  var largeArc = (endDeg - startDeg) > 180 ? 1 : 0;
+  return [
+    `M ${p1.x.toFixed(2)} ${p1.y.toFixed(2)}`,
+    `A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`,
+    `L ${p3.x.toFixed(2)} ${p3.y.toFixed(2)}`,
+    `A ${rInner} ${rInner} 0 ${largeArc} 0 ${p4.x.toFixed(2)} ${p4.y.toFixed(2)}`,
+    `Z`
+  ].join(' ');
+}
+
+function renderWheels() {
+  var cfg = getProtoCfg();
+  var N = cfg.maxSeq + 1;
+  var stepDeg = 360 / N;
+  var gapDeg = N === 2 ? 6 : 4;
+
+  // Render Sender Wheel
+  var sSvg = document.getElementById('sender-wheel-svg');
+  if (sSvg) {
+    var html = '';
+    for (var s = 0; s < N; s++) {
+      var a1 = s * stepDeg + gapDeg / 2;
+      var a2 = (s + 1) * stepDeg - gapDeg / 2;
+      var inWin = between(sim.ackExpected, s, sim.nextFrameToSend);
+      var bufEntry = sim.senderBuf[s];
+      var fill = 'var(--surface-container-high)';
+      var stroke = 'var(--outline-variant)';
+      var textColor = 'var(--on-surface-variant)';
+
+      if (bufEntry) {
+        fill = bufEntry.timedOut ? 'var(--amber-tint)' : 'var(--primary-container)';
+        stroke = bufEntry.timedOut ? 'var(--warning)' : 'var(--primary)';
+        textColor = 'var(--on-surface)';
+      } else if (s === sim.nextFrameToSend && sim.nbuffered < cfg.ws) {
+        fill = 'var(--surface-container)';
+        stroke = 'var(--outline)';
+        textColor = 'var(--on-surface)';
+      }
+
+      if (s === sim.probeSeq) {
+        stroke = 'var(--tertiary)';
+      }
+
+      var pathD = describeArcWedge(120, 120, 56, 98, a1, a2);
+      var midPt = polarPoint(120, 120, 77, s * stepDeg + stepDeg / 2);
+      html += `<g class="wheel-slot" onclick="selectProbeSeq(${s})">`;
+      html += `<path d="${pathD}" fill="${fill}" stroke="${stroke}" stroke-width="${s === sim.probeSeq ? 2.5 : 1.5}"/>`;
+      html += `<text x="${midPt.x.toFixed(1)}" y="${(midPt.y + 4).toFixed(1)}" text-anchor="middle" fill="${textColor}" font-family="Geist Mono, monospace" font-size="13" font-weight="600">${s}</text>`;
+      html += `</g>`;
+    }
+
+    // Pointer markers for ackExpected (lower) & nextFrameToSend (upper)
+    var lowPt = polarPoint(120, 120, 108, sim.ackExpected * stepDeg + stepDeg / 2);
+    var highPt = polarPoint(120, 120, 44, sim.nextFrameToSend * stepDeg + stepDeg / 2);
+    html += `<circle cx="${lowPt.x.toFixed(1)}" cy="${lowPt.y.toFixed(1)}" r="5" fill="var(--tertiary)"/>`;
+    html += `<circle cx="${highPt.x.toFixed(1)}" cy="${highPt.y.toFixed(1)}" r="4.5" fill="var(--primary)"/>`;
+    html += `<text x="120" y="116" text-anchor="middle" fill="var(--on-surface)" font-family="Instrument Sans, sans-serif" font-size="13" font-weight="600">MOD ${N}</text>`;
+    html += `<text x="120" y="132" text-anchor="middle" fill="var(--on-surface-variant)" font-family="Geist Mono, monospace" font-size="10">W&#8347;=${cfg.ws}</text>`;
+    sSvg.innerHTML = html;
+  }
+
+  // Render Receiver Wheel
+  var rSvg = document.getElementById('receiver-wheel-svg');
+  if (rSvg) {
+    var rHtml = '';
+    for (var r = 0; r < N; r++) {
+      var ra1 = r * stepDeg + gapDeg / 2;
+      var ra2 = (r + 1) * stepDeg - gapDeg / 2;
+      var inRecvWin = (cfg.wr === 1) ? (r === sim.frameExpected) : between(sim.frameExpected, r, sim.tooFar);
+      var isArrived = !!sim.arrived[r];
+      var rFill = 'var(--surface-container-high)';
+      var rStroke = 'var(--outline-variant)';
+      var rText = 'var(--on-surface-variant)';
+
+      if (isArrived) {
+        rFill = 'var(--sage-tint)';
+        rStroke = 'var(--tertiary)';
+        rText = 'var(--tertiary)';
+      } else if (r === sim.frameExpected) {
+        rFill = 'var(--cyan-tint)';
+        rStroke = 'var(--primary)';
+        rText = 'var(--primary)';
+      } else if (inRecvWin) {
+        rFill = 'var(--surface-container)';
+        rStroke = 'var(--outline)';
+        rText = 'var(--on-surface)';
+      }
+      if (r === sim.probeSeq) {
+        rStroke = 'var(--warning)';
+      }
+
+      var rPath = describeArcWedge(120, 120, 56, 98, ra1, ra2);
+      var rMid = polarPoint(120, 120, 77, r * stepDeg + stepDeg / 2);
+      rHtml += `<g class="wheel-slot" onclick="selectProbeSeq(${r})">`;
+      rHtml += `<path d="${rPath}" fill="${rFill}" stroke="${rStroke}" stroke-width="${r === sim.probeSeq ? 2.5 : 1.5}"/>`;
+      rHtml += `<text x="${rMid.x.toFixed(1)}" y="${(rMid.y + 4).toFixed(1)}" text-anchor="middle" fill="${rText}" font-family="Geist Mono, monospace" font-size="13" font-weight="600">${r}</text>`;
+      rHtml += `</g>`;
+    }
+
+    var expPt = polarPoint(120, 120, 108, sim.frameExpected * stepDeg + stepDeg / 2);
+    rHtml += `<circle cx="${expPt.x.toFixed(1)}" cy="${expPt.y.toFixed(1)}" r="5" fill="var(--primary)"/>`;
+    rHtml += `<text x="120" y="116" text-anchor="middle" fill="var(--on-surface)" font-family="Instrument Sans, sans-serif" font-size="13" font-weight="600">MOD ${N}</text>`;
+    rHtml += `<text x="120" y="132" text-anchor="middle" fill="var(--on-surface-variant)" font-family="Geist Mono, monospace" font-size="10">W&#7523;=${cfg.wr}</text>`;
+    rSvg.innerHTML = rHtml;
+  }
+
+  // Titles & Chips
+  var swTitle = document.getElementById('sender-win-title');
+  var rwTitle = document.getElementById('recv-win-title');
+  var sChip = document.getElementById('sender-buf-chip');
+  var rChip = document.getElementById('recv-buf-chip');
+  var sPtr = document.getElementById('sender-pointers-readout');
+  var rPtr = document.getElementById('recv-pointers-readout');
+
+  if (swTitle) swTitle.textContent = `W\u209b = ${cfg.ws} (Mod ${N})`;
+  if (rwTitle) rwTitle.textContent = `W\u1d63 = ${cfg.wr} (Mod ${N})`;
+  if (sChip) sChip.textContent = `${sim.nbuffered} / ${cfg.ws} Buffered`;
+  var oooCount = Object.keys(sim.arrived).length;
+  if (rChip) rChip.textContent = `${oooCount} Out-of-Order`;
+  if (sPtr) sPtr.textContent = `ack_expected = ${sim.ackExpected} \u00b7 next_frame_to_send = ${sim.nextFrameToSend}`;
+  if (rPtr) rPtr.textContent = `frame_expected = ${sim.frameExpected} \u00b7 too_far = ${sim.tooFar}`;
+}
+
+function renderPipeline() {
+  var pkLayer = document.getElementById('pipeline-packets-layer');
+  var evLayer = document.getElementById('pipeline-events-layer');
+  if (!pkLayer || !evLayer) return;
+
+  var pHtml = '';
+  for (var i = 0; i < sim.inFlight.length; i++) {
+    var p = sim.inFlight[i];
+    if (p.kind === 'DATA') {
+      var x = 44 + p.progress * 432;
+      var y = 62;
+      var boxFill = p.corrupted ? 'var(--error-tint)' : (p.isRetrans ? 'var(--amber-tint)' : 'var(--primary-container)');
+      var boxStroke = p.corrupted ? 'var(--error)' : (p.isRetrans ? 'var(--warning)' : 'var(--primary)');
+      var txtFill = p.corrupted ? 'var(--error)' : 'var(--on-surface)';
+      var label = p.corrupted ? `SEQ ${p.seq} !` : `SEQ ${p.seq}`;
+      pHtml += `<g transform="translate(${x.toFixed(1)}, ${y})">`;
+      pHtml += `<rect x="-30" y="-14" width="60" height="28" rx="6" fill="${boxFill}" stroke="${boxStroke}" stroke-width="1.5"/>`;
+      pHtml += `<text x="0" y="4" text-anchor="middle" fill="${txtFill}" font-family="Geist Mono, monospace" font-size="11" font-weight="600">${label}</text>`;
+      pHtml += `</g>`;
+    } else {
+      var rx = 476 - p.progress * 432;
+      var ry = 142;
+      var isNak = p.kind === 'NAK';
+      var rFill = isNak ? 'var(--amber-tint)' : 'var(--sage-tint)';
+      var rStroke = isNak ? 'var(--warning)' : 'var(--tertiary)';
+      var rTxt = isNak ? 'var(--warning)' : 'var(--tertiary)';
+      pHtml += `<g transform="translate(${rx.toFixed(1)}, ${ry})">`;
+      pHtml += `<rect x="-30" y="-13" width="60" height="26" rx="6" fill="${rFill}" stroke="${rStroke}" stroke-width="1.5"/>`;
+      pHtml += `<text x="0" y="4" text-anchor="middle" fill="${rTxt}" font-family="Geist Mono, monospace" font-size="11" font-weight="600">${p.kind} ${p.ackNum}</text>`;
+      pHtml += `</g>`;
+    }
+  }
+  pkLayer.innerHTML = pHtml;
+
+  var eHtml = '';
+  for (var j = 0; j < sim.events.length; j++) {
+    var ev = sim.events[j];
+    eHtml += `<text x="${ev.x.toFixed(1)}" y="${ev.y.toFixed(1)}" text-anchor="middle" opacity="${Math.max(0.15, ev.life).toFixed(2)}" fill="var(${ev.colorVar})" font-family="Geist Mono, monospace" font-size="10.5" font-weight="600">${escapeHtml(ev.text)}</text>`;
+  }
+  evLayer.innerHTML = eHtml;
+
+  // Update KPIs
+  var elapsedSec = Math.max(1, (performance.now() - sim.startTimeMs) / 1000);
+  var delivEl = document.getElementById('kpi-delivered');
+  var goodEl = document.getElementById('kpi-goodput');
+  var retEl = document.getElementById('kpi-retrans');
+  var nakEl = document.getElementById('kpi-naks');
+  var lostEl = document.getElementById('kpi-lost');
+  var auxEl = document.getElementById('kpi-ack-timer');
+
+  if (delivEl) delivEl.textContent = String(sim.deliveredCount);
+  if (goodEl) goodEl.textContent = `${(sim.deliveredCount / elapsedSec).toFixed(2)} frames/s`;
+  if (retEl) retEl.textContent = String(sim.retransCount);
+  if (nakEl) nakEl.textContent = `${sim.nakCount} NAKs sent`;
+  if (lostEl) lostEl.textContent = String(sim.lostCount);
+  if (auxEl) auxEl.textContent = sim.auxAckTimerMs !== null ? `Aux ACK: ${Math.round(sim.auxAckTimerMs)} ms` : 'Aux ACK: Idle';
+}
+
+function selectProbeSeq(seq) {
+  sim.probeSeq = seq;
+  renderSlidingAll();
+  saveAppState();
+}
+
+function renderBetweenInspector() {
+  var cfg = getProtoCfg();
+  var N = cfg.maxSeq + 1;
+  var a = sim.ackExpected;
+  var b = sim.probeSeq % N;
+  var c = sim.nextFrameToSend;
+
+  var c1 = (a <= b) && (b < c);
+  var c2 = (c < a) && (a <= b);
+  var c3 = (b < c) && (c < a);
+  var res = c1 || c2 || c3;
+
+  var badge = document.getElementById('probe-result-badge');
+  var exprEl = document.getElementById('between-formula-display');
+  var btnsEl = document.getElementById('probe-seq-buttons');
+
+  if (badge) {
+    badge.textContent = `between(${a}, ${b}, ${c}) = ${res ? 'TRUE (In Sender Window)' : 'FALSE (Outside Window)'}`;
+    badge.className = res ? 'status-chip' : 'status-chip cyan';
+  }
+  if (exprEl) {
+    exprEl.innerHTML =
+      `<span class="${c1 ? 'clause-active' : 'clause-inactive'}">((${a} &lt;= ${b}) &amp;&amp; (${b} &lt; ${c}))</span> || ` +
+      `<span class="${c2 ? 'clause-active' : 'clause-inactive'}">((${c} &lt; ${a}) &amp;&amp; (${a} &lt;= ${b}))</span> || ` +
+      `<span class="${c3 ? 'clause-active' : 'clause-inactive'}">((${b} &lt; ${c}) &amp;&amp; (${c} &lt; ${a}))</span>`;
+  }
+  if (btnsEl) {
+    var bHtml = '';
+    for (var i = 0; i < N; i++) {
+      bHtml += `<button type="button" class="chip-btn ${i === b ? 'active' : ''}" onclick="selectProbeSeq(${i})">b=${i}</button>`;
+    }
+    btnsEl.innerHTML = bHtml;
+  }
+}
+
+function renderSlidingAll() {
+  renderWheels();
+  renderPipeline();
+  renderBetweenInspector();
+}
+
+/* ===== Section 3A: TCP Tahoe vs TCP Reno Lab ===== */
+function initTcpChart() {
+  var canvas = document.getElementById('tcp-chart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (tcpChart) tcpChart.destroy();
+
+  var c1 = cssToken('--data-1');
+  var c4 = cssToken('--data-4');
+  var gridColor = cssToken('--outline-variant');
+  var tickColor = cssToken('--on-surface-variant');
+  var monoFont = cssToken('--font-label');
+
+  tcpChart = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: tcpLab.labels,
+      datasets: [
+        {
+          label: 'TCP Reno cwnd (MSS)',
+          data: tcpLab.reno.historyCwnd,
+          borderColor: c1,
+          backgroundColor: 'transparent',
+          borderWidth: 2.5,
+          tension: 0,
+          pointRadius: 2.5
+        },
+        {
+          label: 'TCP Tahoe cwnd (MSS)',
+          data: tcpLab.tahoe.historyCwnd,
+          borderColor: c4,
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          tension: 0,
+          pointRadius: 2
+        },
+        {
+          label: 'Reno ssthresh',
+          data: tcpLab.reno.historySs,
+          borderColor: c1,
+          borderDash: [5, 5],
+          borderWidth: 1.25,
+          tension: 0,
+          pointRadius: 0
+        },
+        {
+          label: 'Tahoe ssthresh',
+          data: tcpLab.tahoe.historySs,
+          borderColor: c4,
+          borderDash: [3, 4],
+          borderWidth: 1.25,
+          tension: 0,
+          pointRadius: 0
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 140 },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          labels: {
+            color: tickColor,
+            font: { family: monoFont, size: 11 }
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Transmission Round (RTTs)', color: tickColor, font: { family: monoFont, size: 11 } },
+          ticks: { color: tickColor, font: { family: monoFont, size: 11 } },
+          grid: { color: gridColor }
+        },
+        y: {
+          beginAtZero: true,
+          suggestedMax: 45,
+          title: { display: true, text: 'Congestion Window (MSS)', color: tickColor, font: { family: monoFont, size: 11 } },
+          ticks: { color: tickColor, font: { family: monoFont, size: 11 } },
+          grid: { color: gridColor }
+        }
+      }
+    }
+  });
+}
+
+function advanceSingleTcpState(st, kind, lossType) {
+  if (lossType === 'dup3') {
+    st.ssthresh = Math.max(2, Math.floor(st.cwnd / 2));
+    if (kind === 'tahoe') {
+      // Tahoe resets cwnd to 1 MSS and enters Slow Start
+      st.cwnd = 1;
+      st.phase = 'Slow Start (3×Dup)';
+    } else {
+      // Reno Fast Retransmit + Fast Recovery -> resumes at ssthresh
+      st.cwnd = st.ssthresh;
+      st.phase = 'Fast Recovery';
+    }
+  } else if (lossType === 'timeout') {
+    st.ssthresh = Math.max(2, Math.floor(st.cwnd / 2));
+    st.cwnd = 1;
+    st.phase = 'Slow Start (Timeout)';
+  } else {
+    // Normal RTT progression
+    if (st.cwnd < st.ssthresh) {
+      st.cwnd = Math.min(st.ssthresh, st.cwnd * 2, tcpLab.maxWindow);
+      st.phase = st.cwnd >= st.ssthresh ? 'Congestion Avoidance' : 'Slow Start';
+    } else {
+      st.cwnd = Math.min(tcpLab.maxWindow, st.cwnd + 1);
+      st.phase = 'AIMD (+1 MSS/RTT)';
+    }
+  }
+  st.total += st.cwnd;
+  st.historyCwnd.push(st.cwnd);
+  st.historySs.push(st.ssthresh);
+}
+
+function stepTcpRound() {
+  tcpLab.round++;
+  tcpLab.labels.push(String(tcpLab.round));
+  advanceSingleTcpState(tcpLab.tahoe, 'tahoe', null);
+  advanceSingleTcpState(tcpLab.reno, 'reno', null);
+  updateTcpUI(`Round ${tcpLab.round}: Normal ACK clock progression.`);
+}
+
+function injectTcpLoss(lossType) {
+  tcpLab.round++;
+  tcpLab.labels.push(String(tcpLab.round));
+  advanceSingleTcpState(tcpLab.tahoe, 'tahoe', lossType);
+  advanceSingleTcpState(tcpLab.reno, 'reno', lossType);
+  var msg = lossType === 'dup3'
+    ? `Round ${tcpLab.round}: 3\u00d7 Duplicate ACKs \u2014 Tahoe drops to 1 MSS; Reno enters Fast Recovery at ssthresh=${tcpLab.reno.ssthresh}.`
+    : `Round ${tcpLab.round}: Retransmission Timeout \u2014 Both Tahoe and Reno drop cwnd to 1 MSS.`;
+  updateTcpUI(msg);
+}
+
+function toggleTcpAuto() {
+  var btn = document.getElementById('btn-tcp-auto');
+  if (tcpLab.autoTimer) {
+    clearInterval(tcpLab.autoTimer);
+    tcpLab.autoTimer = null;
+    if (btn) btn.textContent = 'Auto Run';
+    return;
+  }
+  if (btn) btn.textContent = 'Stop Auto';
+  tcpLab.autoTimer = setInterval(function() {
+    if (tcpLab.round >= 44) {
+      clearInterval(tcpLab.autoTimer);
+      tcpLab.autoTimer = null;
+      if (btn) btn.textContent = 'Auto Run';
+      return;
+    }
+    if (tcpLab.reno.cwnd >= tcpLab.maxWindow - 4) {
+      injectTcpLoss('dup3');
+    } else {
+      stepTcpRound();
+    }
+  }, 550);
+}
+
+function updateTcpConfig(val) {
+  var n = Math.min(64, Math.max(8, Number(val) || 32));
+  tcpLab.initSsthresh = n;
+  saveAppState();
+}
+
+function resetTcpLab() {
+  if (tcpLab.autoTimer) {
+    clearInterval(tcpLab.autoTimer);
+    tcpLab.autoTimer = null;
+    var btn = document.getElementById('btn-tcp-auto');
+    if (btn) btn.textContent = 'Auto Run';
+  }
+  var ss = tcpLab.initSsthresh;
+  tcpLab.round = 0;
+  tcpLab.labels = ['0'];
+  tcpLab.tahoe = { cwnd: 1, ssthresh: ss, total: 1, phase: 'Slow Start', historyCwnd: [1], historySs: [ss] };
+  tcpLab.reno = { cwnd: 1, ssthresh: ss, total: 1, phase: 'Slow Start', historyCwnd: [1], historySs: [ss] };
+  updateTcpUI(`Round 0 \u2014 Initialised cwnd = 1 MSS, ssthresh = ${ss} MSS.`);
+}
+
+function loadTcpPreset(name, overrideSsthresh) {
+  tcpLab.preset = name;
+  var ids = ['classic', 'lossy', 'lfn'];
+  for (var i = 0; i < ids.length; i++) {
+    var b = document.getElementById('tcp-preset-' + ids[i]);
+    if (b) b.classList.toggle('active', ids[i] === name);
+  }
+  if (name === 'classic') {
+    tcpLab.initSsthresh = 32;
+    tcpLab.maxWindow = 46;
+  } else if (name === 'lossy') {
+    tcpLab.initSsthresh = 24;
+    tcpLab.maxWindow = 36;
+  } else {
+    tcpLab.initSsthresh = 48;
+    tcpLab.maxWindow = 64;
+  }
+  if (typeof overrideSsthresh === 'number' && overrideSsthresh >= 8 && overrideSsthresh <= 64) {
+    tcpLab.initSsthresh = overrideSsthresh;
+  }
+  var inp = document.getElementById('input-init-ssthresh');
+  if (inp) inp.value = tcpLab.initSsthresh;
+  resetTcpLab();
+
+  // Pre-populate a meaningful trace so the comparison chart opens rich immediately
+  var steps = name === 'classic' ? 13 : (name === 'lossy' ? 9 : 16);
+  for (var r = 0; r < steps; r++) stepTcpRound();
+  injectTcpLoss('dup3');
+  for (var r2 = 0; r2 < 9; r2++) stepTcpRound();
+  if (name === 'lossy') {
+    injectTcpLoss('timeout');
+    for (var r3 = 0; r3 < 6; r3++) stepTcpRound();
+  }
+  saveAppState();
+}
+
+function updateTcpUI(noteText) {
+  var tCwnd = document.getElementById('tahoe-cwnd');
+  var tSs = document.getElementById('tahoe-ssthresh');
+  var tTot = document.getElementById('tahoe-total');
+  var tPh = document.getElementById('tahoe-phase-chip');
+
+  var rCwnd = document.getElementById('reno-cwnd');
+  var rSs = document.getElementById('reno-ssthresh');
+  var rTot = document.getElementById('reno-total');
+  var rPh = document.getElementById('reno-phase-chip');
+
+  if (tCwnd) tCwnd.textContent = String(tcpLab.tahoe.cwnd);
+  if (tSs) tSs.textContent = String(tcpLab.tahoe.ssthresh);
+  if (tTot) tTot.textContent = String(tcpLab.tahoe.total);
+  if (tPh) tPh.textContent = tcpLab.tahoe.phase;
+
+  if (rCwnd) rCwnd.textContent = String(tcpLab.reno.cwnd);
+  if (rSs) rSs.textContent = String(tcpLab.reno.ssthresh);
+  if (rTot) rTot.textContent = String(tcpLab.reno.total);
+  if (rPh) rPh.textContent = tcpLab.reno.phase;
+
+  var adv = tcpLab.tahoe.total > 0 ? ((tcpLab.reno.total - tcpLab.tahoe.total) / tcpLab.tahoe.total * 100) : 0;
+  var advEl = document.getElementById('reno-advantage-delta');
+  if (advEl) advEl.textContent = `Reno Throughput Delta: ${adv >= 0 ? '+' : ''}${adv.toFixed(1)}%`;
+
+  var noteEl = document.getElementById('tcp-event-note');
+  if (noteEl && noteEl.firstElementChild) {
+    noteEl.firstElementChild.textContent = noteText;
+  }
+  if (tcpChart) {
+    tcpChart.data.labels = tcpLab.labels;
+    tcpChart.data.datasets[0].data = tcpLab.reno.historyCwnd;
+    tcpChart.data.datasets[1].data = tcpLab.tahoe.historyCwnd;
+    tcpChart.data.datasets[2].data = tcpLab.reno.historySs;
+    tcpChart.data.datasets[3].data = tcpLab.tahoe.historySs;
+    tcpChart.update();
+  }
+}
+
+/* ===== Section 3B: Token Bucket Traffic Shaper ===== */
+function syncTbRateSlider(val) {
+  bucketLab.rateMBs = Number(val);
+  var inp = document.getElementById('input-tb-rate');
+  if (inp) inp.value = bucketLab.rateMBs;
+  updateBucketModel();
+  saveAppState();
+}
+function syncTbRateNumber(val) {
+  bucketLab.rateMBs = Math.min(80, Math.max(5, Number(val) || 25));
+  var sl = document.getElementById('slider-tb-rate');
+  if (sl) sl.value = bucketLab.rateMBs;
+  updateBucketModel();
+  saveAppState();
+}
+function syncTbCapSlider(val) {
+  bucketLab.capKB = Number(val);
+  var inp = document.getElementById('input-tb-cap');
+  if (inp) inp.value = bucketLab.capKB;
+  updateBucketModel();
+  saveAppState();
+}
+function syncTbCapNumber(val) {
+  bucketLab.capKB = Math.min(20000, Math.max(0, Number(val) || 9600));
+  var sl = document.getElementById('slider-tb-cap');
+  if (sl) sl.value = bucketLab.capKB;
+  updateBucketModel();
+  saveAppState();
+}
+
+function loadBucketPreset(capKB) {
+  bucketLab.rateMBs = 25;
+  bucketLab.capKB = capKB;
+  var rSl = document.getElementById('slider-tb-rate');
+  var rIn = document.getElementById('input-tb-rate');
+  var cSl = document.getElementById('slider-tb-cap');
+  var cIn = document.getElementById('input-tb-cap');
+  if (rSl) rSl.value = 25;
+  if (rIn) rIn.value = 25;
+  if (cSl) cSl.value = capKB;
+  if (cIn) cIn.value = capKB;
+
+  var pUn = document.getElementById('tb-preset-unaltered');
+  var pSm = document.getElementById('tb-preset-smoothed');
+  var pFl = document.getElementById('tb-preset-flat');
+  if (pUn) pUn.classList.toggle('active', capKB === 16000);
+  if (pSm) pSm.classList.toggle('active', capKB === 9600);
+  if (pFl) pFl.classList.toggle('active', capKB === 0);
+
+  updateBucketModel();
+  saveAppState();
+}
+
+function triggerBucketBurst() {
+  bucketLab.animPhase = 1.0;
+}
+
+function computeBucketSeries() {
+  // Simulate 0..1000 ms in 20 ms steps (51 points) matching Tanenbaum Fig. 5-29
+  var R_MBs = bucketLab.rateMBs;
+  var M_MBs = bucketLab.peakMBs;
+  var B_KB = bucketLab.capKB;
+  var burstTotalKB = bucketLab.burstKB; // 16,000 KB initial host burst
+
+  var times = [];
+  var outRatesMbps = [];
+  var bucketLevelsKB = [];
+
+  var tokensKB = B_KB;
+  var queuedKB = 0;
+
+  for (var t = 0; t <= 1000; t += 20) {
+    var dtSec = 0.02;
+    // Host produces burst during first 128 ms (16,000 KB at 125 MB/s = 128 ms)
+    if (t > 0 && t <= 128) {
+      queuedKB += M_MBs * 1000 * dtSec; // 125 MB/s * 0.02s = 2500 KB
+    }
+    // Add incoming tokens at rate R
+    if (t > 0) {
+      tokensKB = Math.min(B_KB, tokensKB + R_MBs * 1000 * dtSec);
+    }
+
+    var sentKB = 0;
+    if (queuedKB > 0) {
+      var maxLineKB = M_MBs * 1000 * dtSec;
+      var availKB = tokensKB + (B_KB === 0 ? R_MBs * 1000 * dtSec : 0);
+      sentKB = Math.min(queuedKB, maxLineKB, availKB);
+      queuedKB -= sentKB;
+      if (B_KB > 0) {
+        tokensKB = Math.max(0, tokensKB - sentKB);
+      }
+    }
+
+    var rateMbps = (sentKB / dtSec) * 8 / 1000;
+    times.push(String(t));
+    outRatesMbps.push(Math.round(rateMbps));
+    bucketLevelsKB.push(Math.round(tokensKB));
+  }
+
+  return { times: times, outRatesMbps: outRatesMbps, bucketLevelsKB: bucketLevelsKB };
+}
+
+function initBucketChart() {
+  var canvas = document.getElementById('bucket-chart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (bucketChart) bucketChart.destroy();
+
+  var c1 = cssToken('--data-1');
+  var c2 = cssToken('--data-2');
+  var gridColor = cssToken('--outline-variant');
+  var tickColor = cssToken('--on-surface-variant');
+  var monoFont = cssToken('--font-label');
+
+  var simData = computeBucketSeries();
+  bucketChart = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: simData.times,
+      datasets: [
+        {
+          label: 'Shaped Output (Mbps)',
+          data: simData.outRatesMbps,
+          borderColor: c1,
+          borderWidth: 2,
+          stepped: true,
+          pointRadius: 0,
+          yAxisID: 'y'
+        },
+        {
+          label: 'Bucket Level (KB)',
+          data: simData.bucketLevelsKB,
+          borderColor: c2,
+          borderWidth: 2,
+          tension: 0.1,
+          pointRadius: 0,
+          yAxisID: 'y1'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 120 },
+      plugins: {
+        legend: {
+          labels: { color: tickColor, font: { family: monoFont, size: 10.5 } }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Time (ms)', color: tickColor, font: { family: monoFont, size: 10.5 } },
+          ticks: { color: tickColor, font: { family: monoFont, size: 10 }, maxTicksLimit: 6 },
+          grid: { color: gridColor }
+        },
+        y: {
+          type: 'linear',
+          position: 'left',
+          beginAtZero: true,
+          suggestedMax: 1050,
+          ticks: { color: c1, font: { family: monoFont, size: 10 } },
+          grid: { color: gridColor }
+        },
+        y1: {
+          type: 'linear',
+          position: 'right',
+          beginAtZero: true,
+          suggestedMax: 16500,
+          ticks: { color: c2, font: { family: monoFont, size: 10 } },
+          grid: { drawOnChartArea: false }
+        }
+      }
+    }
+  });
+}
+
+function updateBucketModel() {
+  var R = bucketLab.rateMBs;
+  var B = bucketLab.capKB;
+  var M = bucketLab.peakMBs;
+  // S = B / (M - R) in seconds -> * 1000 ms (where B is KB and M, R in MB/s = 1000 KB/s)
+  var S_ms = (M > R) ? (B / (M - R)) : 0;
+
+  var eqEl = document.getElementById('tb-burst-formula');
+  if (eqEl) {
+    eqEl.textContent = `S = B / (M \u2212 R) = ${S_ms.toFixed(1)} ms (R=${R * 8} Mbps)`;
+  }
+  var rLbl = document.getElementById('svg-rate-label');
+  var cLbl = document.getElementById('svg-cap-label');
+  if (rLbl) rLbl.textContent = `R=${R} MB/s`;
+  if (cLbl) cLbl.textContent = `B=${B} KB`;
+
+  if (bucketChart) {
+    var d = computeBucketSeries();
+    bucketChart.data.labels = d.times;
+    bucketChart.data.datasets[0].data = d.outRatesMbps;
+    bucketChart.data.datasets[1].data = d.bucketLevelsKB;
+    bucketChart.update();
+  }
+}
+
+function renderBucketTank(dtMs) {
+  if (bucketLab.animPhase > 0) {
+    bucketLab.animPhase = Math.max(0, bucketLab.animPhase - dtMs / 1600);
+  }
+  var fillPct = bucketLab.capKB === 0 ? 0 : Math.max(0.08, 1 - Math.sin(bucketLab.animPhase * Math.PI) * 0.88);
+  var h = Math.round(fillPct * 84);
+  var yTop = 45 + (84 - h);
+
+  var rect = document.getElementById('bucket-fill-rect');
+  var surf = document.getElementById('bucket-surface-line');
+  var pctLbl = document.getElementById('bucket-pct-label');
+  var drop = document.getElementById('tap-drop');
+
+  if (rect) {
+    rect.setAttribute('y', String(yTop));
+    rect.setAttribute('height', String(h));
+  }
+  if (surf) {
+    surf.setAttribute('y1', String(yTop));
+    surf.setAttribute('y2', String(yTop));
+  }
+  if (pctLbl) {
+    pctLbl.textContent = bucketLab.capKB === 0 ? '0 KB' : `${Math.round(fillPct * 100)}%`;
+  }
+  if (drop) {
+    var dripY = 30 + ((performance.now() % 650) / 650) * 14;
+    drop.setAttribute('cy', dripY.toFixed(1));
+  }
+}
+
+/* ===== Section 4: Real Binary Frame Builder, Dissector & Libpcap Export ===== */
+function computeInternetChecksum(bytes, start, len) {
+  var sum = 0;
+  for (var i = 0; i < len; i += 2) {
+    var hi = bytes[start + i];
+    var lo = (i + 1 < len) ? bytes[start + i + 1] : 0;
+    sum += (hi << 8) | lo;
+  }
+  while (sum >> 16) {
+    sum = (sum & 0xffff) + (sum >> 16);
+  }
+  return (~sum) & 0xffff;
+}
+
+function buildEthernetIPv4TcpFrame(opts) {
+  var c2s = opts.dir === 'C2S';
+  var payloadBytes = [];
+  if (opts.payloadText) {
+    for (var i = 0; i < opts.payloadText.length; i++) {
+      payloadBytes.push(opts.payloadText.charCodeAt(i) & 0x7f);
+    }
+  }
+  var totalLen = 14 + 20 + 20 + payloadBytes.length;
+  var buf = new Uint8Array(totalLen);
+
+  // Ethernet II (14 bytes)
+  var macA = [0x08, 0x00, 0x27, 0x4a, 0x1c, 0x01];
+  var macB = [0x08, 0x00, 0x27, 0x9f, 0x3e, 0x02];
+  var dstMac = c2s ? macB : macA;
+  var srcMac = c2s ? macA : macB;
+  for (var m = 0; m < 6; m++) {
+    buf[m] = dstMac[m];
+    buf[6 + m] = srcMac[m];
+  }
+  buf[12] = 0x08;
+  buf[13] = 0x00; // IPv4
+
+  // IPv4 Header (20 bytes @ offset 14)
+  var ipTotalLen = 20 + 20 + payloadBytes.length;
+  var ipId = wsState.ipIdCounter++;
+  buf[14] = 0x45; // Version 4, IHL 5
+  buf[15] = 0x00;
+  buf[16] = (ipTotalLen >> 8) & 0xff;
+  buf[17] = ipTotalLen & 0xff;
+  buf[18] = (ipId >> 8) & 0xff;
+  buf[19] = ipId & 0xff;
+  buf[20] = 0x40; // Don't Fragment
+  buf[21] = 0x00;
+  buf[22] = 64;   // TTL
+  buf[23] = 6;    // Protocol TCP
+  buf[24] = 0x00;
+  buf[25] = 0x00;
+  var ipA = [192, 168, 56, 101];
+  var ipB = [192, 168, 56, 103];
+  var srcIp = c2s ? ipA : ipB;
+  var dstIp = c2s ? ipB : ipA;
+  for (var p = 0; p < 4; p++) {
+    buf[26 + p] = srcIp[p];
+    buf[30 + p] = dstIp[p];
+  }
+  var ipSum = computeInternetChecksum(buf, 14, 20);
+  buf[24] = (ipSum >> 8) & 0xff;
+  buf[25] = ipSum & 0xff;
+
+  // TCP Header (20 bytes @ offset 34)
+  var srcPort = c2s ? 54210 : 8080;
+  var dstPort = c2s ? 8080 : 54210;
+  var seqNum = c2s ? (wsState.tcpBaseSeq + opts.seq * 64) : wsState.tcpBaseAck;
+  var ackNum = c2s ? wsState.tcpBaseAck : (wsState.tcpBaseSeq + ((opts.ack + 1) * 64));
+  var flags = payloadBytes.length > 0 ? 0x18 : (opts.isDupAck ? 0x50 : 0x10); // PSH+ACK or ACK (ECE bit for NAK marker)
+
+  buf[34] = (srcPort >> 8) & 0xff;
+  buf[35] = srcPort & 0xff;
+  buf[36] = (dstPort >> 8) & 0xff;
+  buf[37] = dstPort & 0xff;
+
+  buf[38] = (seqNum >>> 24) & 0xff;
+  buf[39] = (seqNum >>> 16) & 0xff;
+  buf[40] = (seqNum >>> 8) & 0xff;
+  buf[41] = seqNum & 0xff;
+
+  buf[42] = (ackNum >>> 24) & 0xff;
+  buf[43] = (ackNum >>> 16) & 0xff;
+  buf[44] = (ackNum >>> 8) & 0xff;
+  buf[45] = ackNum & 0xff;
+
+  buf[46] = 0x50; // Header length 20 bytes
+  buf[47] = flags;
+  buf[48] = 0x10;
+  buf[49] = 0x00; // Window 4096
+  buf[50] = 0x00;
+  buf[51] = 0x00;
+  buf[52] = 0x00;
+  buf[53] = 0x00;
+
+  for (var k = 0; k < payloadBytes.length; k++) {
+    buf[54 + k] = payloadBytes[k];
+  }
+
+  // Compute TCP checksum with pseudo-header
+  var tcpLen = 20 + payloadBytes.length;
+  var pseudo = new Uint8Array(12 + tcpLen);
+  for (var q = 0; q < 4; q++) {
+    pseudo[q] = srcIp[q];
+    pseudo[4 + q] = dstIp[q];
+  }
+  pseudo[8] = 0;
+  pseudo[9] = 6;
+  pseudo[10] = (tcpLen >> 8) & 0xff;
+  pseudo[11] = tcpLen & 0xff;
+  for (var r = 0; r < tcpLen; r++) pseudo[12 + r] = buf[34 + r];
+  var tcpSum = computeInternetChecksum(pseudo, 0, pseudo.length);
+  if (opts.corrupted) tcpSum = (tcpSum ^ 0xffff) & 0xffff;
+  buf[50] = (tcpSum >> 8) & 0xff;
+  buf[51] = tcpSum & 0xff;
+
+  return {
+    bytes: buf,
+    srcIp: srcIp.join('.'),
+    dstIp: dstIp.join('.'),
+    srcPort: srcPort,
+    dstPort: dstPort,
+    seqNum: seqNum,
+    ackNum: ackNum,
+    ipId: ipId,
+    ipSum: ipSum,
+    tcpSum: tcpSum,
+    flags: flags,
+    payloadLen: payloadBytes.length
+  };
+}
+
+function logWiresharkPacket(opts) {
+  var no = wsState.packets.length + 1;
+  var timeSec = (performance.now() - sim.startTimeMs) / 1000;
+  var frame = buildEthernetIPv4TcpFrame(opts);
+
+  var pktRecord = {
+    no: no,
+    time: timeSec,
+    src: frame.srcIp,
+    dst: frame.dstIp,
+    srcPort: frame.srcPort,
+    dstPort: frame.dstPort,
+    proto: 'TCP',
+    length: frame.bytes.length,
+    payloadLen: frame.payloadLen,
+    payloadText: opts.payloadText || '',
+    info: opts.note,
+    seqNum: frame.seqNum,
+    ackNum: frame.ackNum,
+    ipId: frame.ipId,
+    ipSum: frame.ipSum,
+    tcpSum: frame.tcpSum,
+    flags: frame.flags,
+    badChecksum: !!opts.corrupted,
+    isRetrans: !!opts.isRetrans,
+    isDupAck: !!opts.isDupAck,
+    dir: opts.dir,
+    bytes: frame.bytes
+  };
+
+  wsState.packets.push(pktRecord);
+  if (wsState.packets.length > 250) {
+    wsState.packets.shift();
+  }
+  if (wsState.selectedNo === null) {
+    wsState.selectedNo = pktRecord.no;
+    wsState.selectedRange = [0, pktRecord.bytes.length - 1];
+  }
+  renderWiresharkPane1();
+  if (wsState.selectedNo === pktRecord.no) {
+    renderWiresharkDetailsAndBytes(pktRecord);
+  }
+  if (wsState.streamOpen) {
+    renderTcpStreamDrawer();
+  }
+}
+
+/* Wireshark Display Filter Evaluator */
+function evalSingleClause(pkt, clause) {
+  var c = clause.trim();
+  if (!c) return true;
+  if (c === 'tcp') return true;
+  if (c === 'tcp.analysis.retransmission') return pkt.isRetrans;
+  if (c === 'tcp.analysis.duplicate_ack') return pkt.isDupAck;
+
+  var m = c.match(/^([a-z0-9_.]+)\s*(==|!=|>|<|>=|<=)\s*(.+)$/i);
+  if (!m) throw new Error(`Invalid filter token: "${c}"`);
+  var field = m[1].toLowerCase();
+  var op = m[2];
+  var rawVal = m[3].trim().replace(/^["']|["']$/g, '');
+  var numVal = Number(rawVal);
+
+  var lhs;
+  if (field === 'ip.src') lhs = pkt.src;
+  else if (field === 'ip.dst') lhs = pkt.dst;
+  else if (field === 'ip.addr') {
+    if (op === '==') return pkt.src === rawVal || pkt.dst === rawVal;
+    if (op === '!=') return pkt.src !== rawVal && pkt.dst !== rawVal;
+    return false;
+  }
+  else if (field === 'tcp.port') {
+    if (op === '==') return pkt.srcPort === numVal || pkt.dstPort === numVal;
+    if (op === '!=') return pkt.srcPort !== numVal && pkt.dstPort !== numVal;
+    return false;
+  }
+  else if (field === 'tcp.srcport') lhs = pkt.srcPort;
+  else if (field === 'tcp.dstport') lhs = pkt.dstPort;
+  else if (field === 'tcp.len') lhs = pkt.payloadLen;
+  else if (field === 'frame.len') lhs = pkt.length;
+  else if (field === 'tcp.seq') lhs = pkt.seqNum;
+  else if (field === 'tcp.ack') lhs = pkt.ackNum;
+  else if (field === 'tcp.flags.ack') lhs = (pkt.flags & 0x10) ? 1 : 0;
+  else if (field === 'tcp.flags.push') lhs = (pkt.flags & 0x08) ? 1 : 0;
+  else if (field === 'frame.bad_checksum') lhs = pkt.badChecksum ? 1 : 0;
+  else throw new Error(`Unknown field: "${field}"`);
+
+  var rhs = (typeof lhs === 'number') ? numVal : rawVal;
+  if (typeof lhs === 'number' && isNaN(rhs)) throw new Error(`Expected number for ${field}`);
+
+  if (op === '==') return lhs === rhs;
+  if (op === '!=') return lhs !== rhs;
+  if (op === '>') return lhs > rhs;
+  if (op === '<') return lhs < rhs;
+  if (op === '>=') return lhs >= rhs;
+  if (op === '<=') return lhs <= rhs;
+  return false;
+}
+
+function evaluateDisplayFilter(pkt, expr) {
+  var trimmed = expr.trim();
+  if (!trimmed) return true;
+  var orParts = trimmed.split(/\s*(?:\|\||\bor\b)\s*/i);
+  for (var i = 0; i < orParts.length; i++) {
+    var andParts = orParts[i].split(/\s*(?:&&|\band\b)\s*/i);
+    var andOk = true;
+    for (var j = 0; j < andParts.length; j++) {
+      if (!evalSingleClause(pkt, andParts[j])) {
+        andOk = false;
+        break;
+      }
+    }
+    if (andOk) return true;
+  }
+  return false;
+}
+
+function applyQuickFilter(expr) {
+  wsState.filterText = expr;
+  var inp = document.getElementById('ws-filter-input');
+  if (inp) inp.value = expr;
+  syncQuickFilterChips(expr);
+  renderWiresharkPane1();
+  saveAppState();
+}
+
+function syncQuickFilterChips(expr) {
+  var chips = document.querySelectorAll('.filter-chips .chip-btn');
+  for (var i = 0; i < chips.length; i++) {
+    var target = chips[i].getAttribute('data-filter');
+    if (target !== null) {
+      chips[i].classList.toggle('active', target === expr);
+    }
+  }
+}
+
+function onDisplayFilterInput(val) {
+  wsState.filterText = val;
+  syncQuickFilterChips(val.trim());
+  renderWiresharkPane1();
+  saveAppState();
+}
+
+function clearDisplayFilter() {
+  applyQuickFilter('');
+}
+
+function renderWiresharkPane1() {
+  var tbody = document.getElementById('ws-packet-tbody');
+  var countEl = document.getElementById('ws-packet-count');
+  var inpEl = document.getElementById('ws-filter-input');
+  var fbEl = document.getElementById('ws-filter-feedback');
+  if (!tbody) return;
+
+  var filtered = [];
+  var filterError = null;
+  if (wsState.filterText.trim() !== '') {
+    try {
+      for (var i = 0; i < wsState.packets.length; i++) {
+        if (evaluateDisplayFilter(wsState.packets[i], wsState.filterText)) {
+          filtered.push(wsState.packets[i]);
+        }
+      }
+      wsState.filterValid = true;
+    } catch (err) {
+      filterError = err.message;
+      wsState.filterValid = false;
+      filtered = wsState.packets;
+    }
+  } else {
+    wsState.filterValid = true;
+    filtered = wsState.packets;
+  }
+
+  if (inpEl) {
+    inpEl.classList.remove('is-valid', 'is-invalid');
+    if (wsState.filterText.trim() !== '') {
+      inpEl.classList.add(wsState.filterValid ? 'is-valid' : 'is-invalid');
+    }
+  }
+  if (fbEl) {
+    if (filterError) {
+      fbEl.textContent = `Filter syntax error: ${filterError} — try tcp.flags.ack == 1 or tcp.len > 0.`;
+      fbEl.style.color = 'var(--error)';
+    } else if (wsState.filterText.trim() !== '') {
+      fbEl.textContent = `Display filter matched ${filtered.length} of ${wsState.packets.length} captured packets.`;
+      fbEl.style.color = 'var(--tertiary)';
+    } else {
+      fbEl.textContent = `Showing all captured frames. Capture Filter (BPF equivalent): host 192.168.56.101 and tcp port 8080`;
+      fbEl.style.color = 'var(--on-surface-variant)';
+    }
+  }
+  if (countEl) {
+    countEl.textContent = `${filtered.length} / ${wsState.packets.length} packets`;
+  }
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="color:var(--on-surface-variant);padding:var(--space-md);">${wsState.packets.length === 0 ? 'No packets captured yet. Click Send Frame or Start Stream above.' : 'No packets match the active display filter.'}</td></tr>`;
+    return;
+  }
+
+  var html = '';
+  for (var k = 0; k < filtered.length; k++) {
+    var p = filtered[k];
+    var rowCls = p.badChecksum || p.isRetrans ? 'ws-row-err' : (p.isDupAck ? 'ws-row-dup' : (p.payloadLen > 0 ? 'ws-row-data' : 'ws-row-ack'));
+    if (p.no === wsState.selectedNo) rowCls += ' is-selected';
+    html += `<tr class="${rowCls}" onclick="selectWiresharkPacket(${p.no})">`;
+    html += `<td>${p.no}</td>`;
+    html += `<td>${p.time.toFixed(4)}</td>`;
+    html += `<td>${escapeHtml(p.src)}</td>`;
+    html += `<td>${escapeHtml(p.dst)}</td>`;
+    html += `<td>${p.proto}</td>`;
+    html += `<td>${p.length}</td>`;
+    html += `<td>${escapeHtml(p.info)}</td>`;
+    html += `</tr>`;
+  }
+  tbody.innerHTML = html;
+}
+
+function selectWiresharkPacket(no) {
+  wsState.selectedNo = no;
+  var pkt = null;
+  for (var i = 0; i < wsState.packets.length; i++) {
+    if (wsState.packets[i].no === no) { pkt = wsState.packets[i]; break; }
+  }
+  if (!pkt) return;
+  wsState.selectedRange = [0, pkt.bytes.length - 1];
+  renderWiresharkPane1();
+  renderWiresharkDetailsAndBytes(pkt);
+}
+
+function highlightByteRange(start, end) {
+  wsState.selectedRange = [start, end];
+  var pkt = null;
+  for (var i = 0; i < wsState.packets.length; i++) {
+    if (wsState.packets[i].no === wsState.selectedNo) { pkt = wsState.packets[i]; break; }
+  }
+  if (pkt) renderWiresharkDetailsAndBytes(pkt);
+}
+
+function isRangeActive(s, e) {
+  return wsState.selectedRange && wsState.selectedRange[0] === s && wsState.selectedRange[1] === e;
+}
+
+function renderWiresharkDetailsAndBytes(pkt) {
+  var treeEl = document.getElementById('ws-details-tree');
+  var dumpEl = document.getElementById('ws-bytes-dump');
+  var selLbl = document.getElementById('ws-selected-label');
+  var rngLbl = document.getElementById('ws-byte-range-label');
+  if (!treeEl || !dumpEl || !pkt) return;
+
+  var total = pkt.bytes.length;
+  var r = wsState.selectedRange || [0, total - 1];
+  if (selLbl) selLbl.textContent = `Frame #${pkt.no} (${total} bytes)`;
+  if (rngLbl) rngLbl.textContent = `Offsets: 0x${r[0].toString(16).padStart(4, '0')} – 0x${r[1].toString(16).padStart(4, '0')} (${r[1] - r[0] + 1} B)`;
+
+  var macDst = pkt.dir === 'C2S' ? '08:00:27:9f:3e:02' : '08:00:27:4a:1c:01';
+  var macSrc = pkt.dir === 'C2S' ? '08:00:27:4a:1c:01' : '08:00:27:9f:3e:02';
+
+  var treeHtml = '';
+  treeHtml += `<div class="tree-node">`;
+  treeHtml += `<button type="button" class="tree-summary ${isRangeActive(0, total - 1) ? 'active-range' : ''}" onclick="highlightByteRange(0, ${total - 1})">&#9662; Frame ${pkt.no}: ${total} bytes on wire, ${total} bytes captured (VirtualBox Host-Only)</button>`;
+  treeHtml += `</div>`;
+
+  treeHtml += `<div class="tree-node">`;
+  treeHtml += `<button type="button" class="tree-summary ${isRangeActive(0, 13) ? 'active-range' : ''}" onclick="highlightByteRange(0, 13)">&#9662; Ethernet II, Src: ${macSrc}, Dst: ${macDst}</button>`;
+  treeHtml += `<div class="tree-children">`;
+  treeHtml += `<button type="button" class="tree-leaf ${isRangeActive(0, 5) ? 'active-range' : ''}" onclick="highlightByteRange(0, 5)">Destination: ${macDst} (6 bytes)</button>`;
+  treeHtml += `<button type="button" class="tree-leaf ${isRangeActive(6, 11) ? 'active-range' : ''}" onclick="highlightByteRange(6, 11)">Source: ${macSrc} (6 bytes)</button>`;
+  treeHtml += `<button type="button" class="tree-leaf ${isRangeActive(12, 13) ? 'active-range' : ''}" onclick="highlightByteRange(12, 13)">Type: IPv4 (0x0800)</button>`;
+  treeHtml += `</div></div>`;
+
+  treeHtml += `<div class="tree-node">`;
+  treeHtml += `<button type="button" class="tree-summary ${isRangeActive(14, 33) ? 'active-range' : ''}" onclick="highlightByteRange(14, 33)">&#9662; Internet Protocol Version 4, Src: ${pkt.src}, Dst: ${pkt.dst}</button>`;
+  treeHtml += `<div class="tree-children">`;
+  treeHtml += `<button type="button" class="tree-leaf ${isRangeActive(14, 14) ? 'active-range' : ''}" onclick="highlightByteRange(14, 14)">0100 .... = Version: 4 | .... 0101 = Header Length: 20 bytes</button>`;
+  treeHtml += `<button type="button" class="tree-leaf ${isRangeActive(16, 17) ? 'active-range' : ''}" onclick="highlightByteRange(16, 17)">Total Length: ${total - 14}</button>`;
+  treeHtml += `<button type="button" class="tree-leaf ${isRangeActive(18, 19) ? 'active-range' : ''}" onclick="highlightByteRange(18, 19)">Identification: 0x${pkt.ipId.toString(16).padStart(4, '0')} (${pkt.ipId})</button>`;
+  treeHtml += `<button type="button" class="tree-leaf ${isRangeActive(22, 23) ? 'active-range' : ''}" onclick="highlightByteRange(22, 23)">TTL: 64 | Protocol: TCP (6)</button>`;
+  treeHtml += `<button type="button" class="tree-leaf ${isRangeActive(24, 25) ? 'active-range' : ''}" onclick="highlightByteRange(24, 25)">Header Checksum: 0x${pkt.ipSum.toString(16).padStart(4, '0')} [verified]</button>`;
+  treeHtml += `<button type="button" class="tree-leaf ${isRangeActive(26, 29) ? 'active-range' : ''}" onclick="highlightByteRange(26, 29)">Source Address: ${pkt.src}</button>`;
+  treeHtml += `<button type="button" class="tree-leaf ${isRangeActive(30, 33) ? 'active-range' : ''}" onclick="highlightByteRange(30, 33)">Destination Address: ${pkt.dst}</button>`;
+  treeHtml += `</div></div>`;
+
+  var flagStr = [];
+  if (pkt.flags & 0x40) flagStr.push('ECE');
+  if (pkt.flags & 0x10) flagStr.push('ACK');
+  if (pkt.flags & 0x08) flagStr.push('PSH');
+
+  treeHtml += `<div class="tree-node">`;
+  treeHtml += `<button type="button" class="tree-summary ${isRangeActive(34, 53) ? 'active-range' : ''}" onclick="highlightByteRange(34, 53)">&#9662; Transmission Control Protocol, Src Port: ${pkt.srcPort}, Dst Port: ${pkt.dstPort}, Seq: ${pkt.seqNum}, Ack: ${pkt.ackNum}, Len: ${pkt.payloadLen}</button>`;
+  treeHtml += `<div class="tree-children">`;
+  treeHtml += `<button type="button" class="tree-leaf ${isRangeActive(34, 35) ? 'active-range' : ''}" onclick="highlightByteRange(34, 35)">Source Port: ${pkt.srcPort}</button>`;
+  treeHtml += `<button type="button" class="tree-leaf ${isRangeActive(36, 37) ? 'active-range' : ''}" onclick="highlightByteRange(36, 37)">Destination Port: ${pkt.dstPort}</button>`;
+  treeHtml += `<button type="button" class="tree-leaf ${isRangeActive(38, 41) ? 'active-range' : ''}" onclick="highlightByteRange(38, 41)">Sequence Number: ${pkt.seqNum}</button>`;
+  treeHtml += `<button type="button" class="tree-leaf ${isRangeActive(42, 45) ? 'active-range' : ''}" onclick="highlightByteRange(42, 45)">Acknowledgement Number: ${pkt.ackNum}</button>`;
+  treeHtml += `<button type="button" class="tree-leaf ${isRangeActive(46, 47) ? 'active-range' : ''}" onclick="highlightByteRange(46, 47)">Flags: 0x${pkt.flags.toString(16).padStart(2, '0')} (${flagStr.join(', ')})</button>`;
+  treeHtml += `<button type="button" class="tree-leaf ${isRangeActive(48, 49) ? 'active-range' : ''}" onclick="highlightByteRange(48, 49)">Window Size: 4096</button>`;
+  treeHtml += `<button type="button" class="tree-leaf ${isRangeActive(50, 51) ? 'active-range' : ''}" onclick="highlightByteRange(50, 51)">Checksum: 0x${pkt.tcpSum.toString(16).padStart(4, '0')} ${pkt.badChecksum ? '[BAD CHECKSUM!]' : '[correct]'}</button>`;
+  treeHtml += `</div></div>`;
+
+  if (pkt.payloadLen > 0) {
+    treeHtml += `<div class="tree-node">`;
+    treeHtml += `<button type="button" class="tree-summary ${isRangeActive(54, total - 1) ? 'active-range' : ''}" onclick="highlightByteRange(54, ${total - 1})">&#9662; Data (${pkt.payloadLen} bytes): ${escapeHtml(pkt.payloadText)}</button>`;
+    treeHtml += `</div>`;
+  }
+  treeEl.innerHTML = treeHtml;
+
+  // Hex & ASCII Byte Dump
+  var hexHtml = '';
+  for (var offset = 0; offset < total; offset += 16) {
+    var bytesHtml = '';
+    var asciiHtml = '';
+    for (var col = 0; col < 16; col++) {
+      var idx = offset + col;
+      if (col === 8) bytesHtml += `<span style="width:6px;display:inline-block;"></span>`;
+      if (idx < total) {
+        var bVal = pkt.bytes[idx];
+        var hl = idx >= r[0] && idx <= r[1];
+        bytesHtml += `<span class="hex-byte ${hl ? 'hl' : ''}">${bVal.toString(16).padStart(2, '0')}</span>`;
+        var ch = (bVal >= 32 && bVal <= 126) ? escapeHtml(String.fromCharCode(bVal)) : '.';
+        asciiHtml += `<span class="hex-char ${hl ? 'hl' : ''}">${ch}</span>`;
+      } else {
+        bytesHtml += `<span class="hex-byte" style="opacity:0;">00</span>`;
+        asciiHtml += ` `;
+      }
+    }
+    hexHtml += `<div class="hex-line">`;
+    hexHtml += `<span class="hex-offset">${offset.toString(16).padStart(4, '0')}</span>`;
+    hexHtml += `<span class="hex-bytes">${bytesHtml}</span>`;
+    hexHtml += `<span class="hex-ascii">${asciiHtml}</span>`;
+    hexHtml += `</div>`;
+  }
+  dumpEl.innerHTML = hexHtml;
+}
+
+/* Follow TCP Stream */
+function toggleTcpStreamDrawer() {
+  wsState.streamOpen = !wsState.streamOpen;
+  var drawer = document.getElementById('tcp-stream-drawer');
+  if (!drawer) return;
+  drawer.hidden = !wsState.streamOpen;
+  if (wsState.streamOpen) renderTcpStreamDrawer();
+}
+
+function renderTcpStreamDrawer() {
+  var logEl = document.getElementById('tcp-stream-log');
+  var metaEl = document.getElementById('stream-summary-meta');
+  if (!logEl) return;
+  var c2sCount = 0;
+  var s2cCount = 0;
+  var html = '';
+  for (var i = 0; i < wsState.packets.length; i++) {
+    var p = wsState.packets[i];
+    if (p.dir === 'C2S') {
+      c2sCount++;
+      html += `<div class="stream-c2s">[Frame #${p.no} 192.168.56.101:54210 &#8594; 192.168.56.103:8080] ${escapeHtml(p.payloadText)}${p.badChecksum ? ' [CORRUPTED]' : ''}</div>`;
+    } else {
+      s2cCount++;
+      html += `<div class="stream-s2c">[Frame #${p.no} 192.168.56.103:8080 &#8594; 192.168.56.101:54210] ${escapeHtml(p.info)}</div>`;
+    }
+  }
+  if (!html) html = `<div style="color:var(--on-surface-variant);">No stream bytes captured yet.</div>`;
+  if (metaEl) metaEl.textContent = `${c2sCount} client data segments \u00b7 ${s2cCount} server acknowledgements`;
+  logEl.innerHTML = html;
+}
+
+/* Libpcap (.pcap) Binary File Export */
+function exportPcapFile() {
+  if (wsState.packets.length === 0) {
+    // Generate a representative initial packet if user clicks export immediately
+    sendSingleFrame();
+  }
+  var globalHeaderLen = 24;
+  var totalLen = globalHeaderLen;
+  for (var i = 0; i < wsState.packets.length; i++) {
+    totalLen += 16 + wsState.packets[i].bytes.length;
+  }
+
+  var out = new Uint8Array(totalLen);
+  var dv = new DataView(out.buffer);
+
+  // Libpcap Global Header (little-endian)
+  dv.setUint32(0, 0xa1b2c3d4, true); // magic_number
+  dv.setUint16(4, 2, true);          // version_major
+  dv.setUint16(6, 4, true);          // version_minor
+  dv.setInt32(8, 0, true);           // thiszone
+  dv.setUint32(12, 0, true);         // sigfigs
+  dv.setUint32(16, 65535, true);     // snaplen
+  dv.setUint32(20, 1, true);         // network = LINKTYPE_ETHERNET
+
+  var offset = 24;
+  var baseEpochSec = Math.floor(Date.now() / 1000);
+  for (var j = 0; j < wsState.packets.length; j++) {
+    var pkt = wsState.packets[j];
+    var tsSec = baseEpochSec + Math.floor(pkt.time);
+    var tsUsec = Math.floor((pkt.time % 1) * 1000000);
+    var capLen = pkt.bytes.length;
+
+    dv.setUint32(offset, tsSec, true);
+    dv.setUint32(offset + 4, tsUsec, true);
+    dv.setUint32(offset + 8, capLen, true);
+    dv.setUint32(offset + 12, capLen, true);
+    offset += 16;
+
+    out.set(pkt.bytes, offset);
+    offset += capLen;
+  }
+
+  var blob = new Blob([out], { type: 'application/vnd.tcpdump.pcap' });
+  var url = URL.createObjectURL(blob);
+  var link = document.createElement('a');
+  link.href = url;
+  link.download = 'wireshark_workbench_session.pcap';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(function() { URL.revokeObjectURL(url); }, 1500);
+}
+
+/* ===== Main Single Animation Loop ===== */
+function mainAnimLoop(nowMs) {
+  var dtMs = Math.min(80, Math.max(0, nowMs - sim.lastTickMs));
+  sim.lastTickMs = nowMs;
+
+  if (sim.inFlight.length > 0 || Object.keys(sim.senderBuf).length > 0 || sim.running || sim.events.length > 0 || sim.auxAckTimerMs !== null) {
+    stepSimulationTick(dtMs);
+    renderSlidingAll();
+  }
+  renderBucketTank(dtMs);
+  animFrameId = requestAnimationFrame(mainAnimLoop);
+}
+
+/* ===== Application Initialisation ===== */
+async function initApp() {
+  await restoreAppState();
+
+  // Sync restored control values into DOM
+  updateProtocolButtons();
+  var latSl = document.getElementById('slider-latency');
+  var latIn = document.getElementById('input-latency');
+  if (latSl) latSl.value = sim.latencyMs;
+  if (latIn) latIn.value = sim.latencyMs;
+
+  var jitSl = document.getElementById('slider-jitter');
+  var jitIn = document.getElementById('input-jitter');
+  if (jitSl) jitSl.value = sim.jitterMs;
+  if (jitIn) jitIn.value = sim.jitterMs;
+
+  var losSl = document.getElementById('slider-loss');
+  var losIn = document.getElementById('input-loss');
+  if (losSl) losSl.value = sim.lossPct;
+  if (losIn) losIn.value = sim.lossPct;
+
+  var tbRSl = document.getElementById('slider-tb-rate');
+  var tbRIn = document.getElementById('input-tb-rate');
+  var tbCSl = document.getElementById('slider-tb-cap');
+  var tbCIn = document.getElementById('input-tb-cap');
+  if (tbRSl) tbRSl.value = bucketLab.rateMBs;
+  if (tbRIn) tbRIn.value = bucketLab.rateMBs;
+  if (tbCSl) tbCSl.value = bucketLab.capKB;
+  if (tbCIn) tbCIn.value = bucketLab.capKB;
+
+  var wsInp = document.getElementById('ws-filter-input');
+  if (wsInp && wsState.filterText) {
+    wsInp.value = wsState.filterText;
+    syncQuickFilterChips(wsState.filterText.trim());
+  }
+
+  // Render initial charts & workbench visuals
+  var restoredSsthresh = tcpLab.initSsthresh;
+  initTcpChart();
+  loadTcpPreset(tcpLab.preset, restoredSsthresh);
+  initBucketChart();
+  updateBucketModel();
+
+  // Seed 2 initial packets in Wireshark & wheels so workbench opens alive and inspectable
+  sendSingleFrame();
+  sendSingleFrame();
+  renderSlidingAll();
+
+  if (typeof lucide !== 'undefined' && lucide.createIcons) {
+    lucide.createIcons();
+  }
+
+  if (animFrameId) cancelAnimationFrame(animFrameId);
+  sim.lastTickMs = performance.now();
+  animFrameId = requestAnimationFrame(mainAnimLoop);
+
+  if (window.notebookAppApi && typeof window.notebookAppApi.notifyAppReady === 'function') {
+    window.notebookAppApi.notifyAppReady();
+  }
+}
+
+document.addEventListener('DOMContentLoaded', initApp);
+</script>
+</body>
+</html>
